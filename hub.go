@@ -5,7 +5,6 @@ import (
 	"github.com/NOVAPokemon/authentication/auth"
 	"github.com/NOVAPokemon/utils"
 	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
-	userdb "github.com/NOVAPokemon/utils/database/user"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -33,7 +32,7 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		if !lobby.started {
 			availableLobbies = append(availableLobbies, utils.Lobby{
 				Id:        id,
-				TrainerId: lobby.Trainer1.Id,
+				Username: lobby.Trainer1.Username,
 			})
 		}
 	}
@@ -68,21 +67,12 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err, user := userdb.GetUserById(claims.Id)
-
-	if err != nil {
-		handleErrorAndCloseConnection(&w, "Error retrieving user", conn, err)
-		return
-	}
-
-	err, trainer1 := trainerdb.GetTrainerById(user.TrainerId)
+	err, trainer1 := trainerdb.GetTrainerByUsername(claims.Username)
 
 	if err != nil {
 		handleErrorAndCloseConnection(&w, "Error retrieving trainer", conn, err)
 		return
 	}
-
-	log.Info(conn)
 
 	lobbyId := primitive.NewObjectID()
 	lobby := NewTrade(lobbyId, trainer1, conn)
@@ -119,7 +109,8 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err, trainer2 := trainerdb.GetTrainerById(claims.Id)
+	//TODO error here because of jwt content
+	err, trainer2 := trainerdb.GetTrainerByUsername(claims.Username)
 
 	if err != nil {
 		handleErrorAndCloseConnection(&w, "Error retrieving trainer with such id", conn2, err)
