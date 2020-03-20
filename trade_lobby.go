@@ -1,10 +1,10 @@
 package main
 
 import (
-"github.com/NOVAPokemon/utils"
-"github.com/gorilla/websocket"
-log "github.com/sirupsen/logrus"
-"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/NOVAPokemon/utils"
+	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // TradeLobby maintains the connections from both trainers and the status of the trade
@@ -105,4 +105,3 @@ func handleRecv(conn *websocket.Conn, channel chan *string) {
 		}
 	}
 }
-

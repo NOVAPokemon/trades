@@ -22,6 +22,13 @@ type Hub struct {
 func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	var availableLobbies = make([]utils.Lobby, 0)
 
+	err, _ := auth.VerifyJWT(&w, r, TradeName)
+
+	if err != nil {
+		log.Error("Unauthenticated client")
+		return
+	}
+
 	for id, lobby := range hub.Trades {
 		if !lobby.started {
 			availableLobbies = append(availableLobbies, utils.Lobby{
@@ -49,23 +56,33 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 
+	if err != nil {
+		handleErrorAndCloseConnection(&w, "Could not upgrade to websocket", conn, err)
+		return
+	}
+
 	err, claims := auth.VerifyJWT(&w, r, TradeName)
 
 	if err != nil {
+		conn.Close()
 		return
 	}
 
 	err, user := userdb.GetUserById(claims.Id)
 
 	if err != nil {
-		handleError(&w, "Error retrieving user", err)
+		handleErrorAndCloseConnection(&w, "Error retrieving user", conn, err)
+		return
 	}
 
 	err, trainer1 := trainerdb.GetTrainerById(user.TrainerId)
 
 	if err != nil {
-		handleError(&w, "Error retrieving trainer", err)
+		handleErrorAndCloseConnection(&w, "Error retrieving trainer", conn, err)
+		return
 	}
+
+	log.Info(conn)
 
 	lobbyId := primitive.NewObjectID()
 	lobby := NewTrade(lobbyId, trainer1, conn)
@@ -116,7 +133,7 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 func handleError(w *http.ResponseWriter, errorString string, err error) {
 	log.Error(err)
-	http.Error(*w, err.Error(), http.StatusInternalServerError)
+	http.Error(*w, errorString, http.StatusInternalServerError)
 	return
 }
 
