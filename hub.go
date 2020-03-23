@@ -5,6 +5,7 @@ import (
 	"github.com/NOVAPokemon/authentication/auth"
 	"github.com/NOVAPokemon/utils"
 	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
+	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -15,7 +16,7 @@ import (
 const TradeName = "TRADES"
 
 type Hub struct {
-	Trades map[primitive.ObjectID]*TradeLobby
+	Trades map[primitive.ObjectID]*ws.Lobby
 }
 
 func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
@@ -29,10 +30,10 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	for id, lobby := range hub.Trades {
-		if !lobby.started {
+		if !lobby.Started {
 			availableLobbies = append(availableLobbies, utils.Lobby{
-				Id:        id,
-				Username: lobby.Trainer1.Username,
+				Id:       id,
+				Username: lobby.Trainers[0].Username,
 			})
 		}
 	}
@@ -63,6 +64,7 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	err, claims := auth.VerifyJWT(&w, r, TradeName)
 
 	if err != nil {
+		// TODO close the connections properly
 		conn.Close()
 		return
 	}
@@ -75,7 +77,8 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	lobbyId := primitive.NewObjectID()
-	lobby := NewTrade(lobbyId, trainer1, conn)
+	lobby := ws.NewLobby(lobbyId)
+	ws.AddTrainer(lobby, trainer1, conn)
 	hub.Trades[lobbyId] = lobby
 }
 
@@ -90,6 +93,7 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	err, claims := auth.VerifyJWT(&w, r, TradeName)
 
 	if err != nil {
+		// TODO close the connections properly
 		conn2.Close()
 		return
 	}
@@ -109,7 +113,6 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//TODO error here because of jwt content
 	err, trainer2 := trainerdb.GetTrainerByUsername(claims.Username)
 
 	if err != nil {
@@ -117,8 +120,7 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JoinTrade(lobby, trainer2, conn2)
-
+	ws.AddTrainer(lobby, trainer2, conn2)
 	StartTrade(lobby)
 }
 
@@ -130,5 +132,6 @@ func handleError(w *http.ResponseWriter, errorString string, err error) {
 
 func handleErrorAndCloseConnection(w *http.ResponseWriter, errorString string, conn *websocket.Conn, err error) {
 	handleError(w, errorString, err)
+	// TODO close the connections properly
 	(*conn).Close()
 }
