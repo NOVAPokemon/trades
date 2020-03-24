@@ -6,7 +6,6 @@ import (
 	"github.com/NOVAPokemon/utils"
 	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
 	ws "github.com/NOVAPokemon/utils/websockets"
-	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
@@ -57,22 +56,20 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
-		handleErrorAndCloseConnection(&w, "Could not upgrade to websocket", conn, err)
+		handleError(&w, "Could not upgrade to websocket", err)
 		return
 	}
 
 	err, claims := auth.VerifyJWT(&w, r, TradeName)
 
 	if err != nil {
-		// TODO close the connections properly
-		conn.Close()
 		return
 	}
 
 	err, trainer1 := trainerdb.GetTrainerByUsername(claims.Username)
 
 	if err != nil {
-		handleErrorAndCloseConnection(&w, "Error retrieving trainer", conn, err)
+		handleError(&w, "Error retrieving trainer", err)
 		return
 	}
 
@@ -86,15 +83,13 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn2, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
-		handleErrorAndCloseConnection(&w, "Connection error", conn2, err)
+		handleError(&w, "Connection error", err)
 		return
 	}
 
 	err, claims := auth.VerifyJWT(&w, r, TradeName)
 
 	if err != nil {
-		// TODO close the connections properly
-		conn2.Close()
 		return
 	}
 
@@ -102,26 +97,30 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	lobbyId, err := primitive.ObjectIDFromHex(splitPath[len(splitPath)-1])
 
 	if err != nil {
-		handleErrorAndCloseConnection(&w, "Battle id invalid", conn2, err)
+		handleError(&w, "Battle id invalid", err)
 		return
 	}
 
 	lobby := hub.Trades[lobbyId]
 
 	if lobby == nil {
-		handleErrorAndCloseConnection(&w, "Trade missing", conn2, err)
+		handleError(&w, "Trade missing", err)
 		return
 	}
 
 	err, trainer2 := trainerdb.GetTrainerByUsername(claims.Username)
 
 	if err != nil {
-		handleErrorAndCloseConnection(&w, "Error retrieving trainer with such id", conn2, err)
+		handleError(&w, "Error retrieving trainer with such id", err)
 		return
 	}
 
+	defer ws.CloseLobby(lobby)
+
 	ws.AddTrainer(lobby, trainer2, conn2)
 	StartTrade(lobby)
+
+	delete(hub.Trades, lobbyId)
 }
 
 func handleError(w *http.ResponseWriter, errorString string, err error) {
@@ -130,8 +129,3 @@ func handleError(w *http.ResponseWriter, errorString string, err error) {
 	return
 }
 
-func handleErrorAndCloseConnection(w *http.ResponseWriter, errorString string, conn *websocket.Conn, err error) {
-	handleError(w, errorString, err)
-	// TODO close the connections properly
-	(*conn).Close()
-}

@@ -50,7 +50,6 @@ func tradeMainLoop(lobby *ws.Lobby, trade *trades.TradeStatus) error {
 
 			if finished {
 				finish(trainer0ChanOut, trainer1ChanOut)
-				closeChannels(trainer0ChanIn, trainer1ChanIn, trainer0ChanOut, trainer0ChanOut)
 				return nil
 			} else {
 				updateClients(trade, trainer0ChanOut, trainer1ChanOut)
@@ -72,7 +71,6 @@ func tradeMainLoop(lobby *ws.Lobby, trade *trades.TradeStatus) error {
 
 			if finished {
 				finish(trainer0ChanOut, trainer1ChanOut)
-				closeChannels(trainer0ChanIn, trainer1ChanIn, trainer0ChanOut, trainer0ChanOut)
 				return nil
 			} else {
 				updateClients(trade, trainer0ChanOut, trainer1ChanOut)
@@ -142,11 +140,6 @@ func finish(trainer0ChanOut, trainer1ChanOut chan *string) {
 
 	trades.SendMessage(finishMessage, trainer0ChanOut)
 	trades.SendMessage(finishMessage, trainer1ChanOut)
-}
-
-func closeChannels(trainer0ChanIn, trainer1ChanIn, trainer0ChanOut, trainer1ChanOut chan *string) {
-	close(trainer0ChanIn)
-	close(trainer1ChanIn)
 }
 
 func updateClients(trade *trades.TradeStatus, trainer0ChanOut, trainer1ChanOut chan *string) {
