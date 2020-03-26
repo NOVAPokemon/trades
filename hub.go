@@ -73,11 +73,6 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn.SetCloseHandler(func(code int, text string) error {
-		log.Info("GOT CLOSING MESSAGE")
-		return nil
-	})
-
 	lobbyId := primitive.NewObjectID()
 	lobby := ws.NewLobby(lobbyId)
 	ws.AddTrainer(lobby, trainer1, conn)
@@ -120,16 +115,13 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn2.SetCloseHandler(func(code int, text string) error {
-		log.Info("GOT CLOSING MESSAGE")
-		return nil
-	})
-
 	ws.AddTrainer(lobby, trainer2, conn2)
 	StartTrade(lobby)
-
 	log.Info("Finished trade")
-	//delete(hub.Trades, lobbyId)
+
+	ws.CloseLobby(lobby)
+
+	delete(hub.Trades, lobbyId)
 }
 
 func handleError(w *http.ResponseWriter, errorString string, err error) {
