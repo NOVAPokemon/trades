@@ -15,7 +15,7 @@ func StartTrade(lobby *ws.Lobby) {
 	}
 
 	tradeStatus := &trades.TradeStatus{
-		Players:       players,
+		Players: players,
 	}
 
 	err := tradeMainLoop(lobby, tradeStatus)
@@ -25,58 +25,41 @@ func StartTrade(lobby *ws.Lobby) {
 }
 
 func tradeMainLoop(lobby *ws.Lobby, trade *trades.TradeStatus) error {
-	trainer0ChanIn := *lobby.TrainerInChannels[0]
-	trainer0ChanOut := *lobby.TrainerOutChannels[0]
-	trainer1ChanIn := *lobby.TrainerInChannels[1]
-	trainer1ChanOut := *lobby.TrainerOutChannels[1]
-
-	// trade main loop
 	for {
 		select {
-		case msgStr := <-trainer0ChanIn:
-			log.Infof(*msgStr)
-			err, msg := trades.ParseMessage(msgStr)
-			if err != nil {
-				handleMessageError(err, trainer0ChanOut)
-				continue
-			}
-
-			err, finished := handleMessage(msg, trade, 0)
-
-			if err != nil {
-				handleMessageError(err, trainer0ChanOut)
-				continue
-			}
-
-			if finished {
-				finish(trainer0ChanOut, trainer1ChanOut)
-				return nil
-			} else {
-				updateClients(trade, trainer0ChanOut, trainer1ChanOut)
-			}
-		case msgStr := <-trainer1ChanIn:
-			log.Infof(*msgStr)
-			err, msg := trades.ParseMessage(msgStr)
-			if err != nil {
-				handleMessageError(err, trainer1ChanOut)
-				continue
-			}
-
-			err, finished := handleMessage(msg, trade, 1)
-
-			if err != nil {
-				handleMessageError(err, trainer1ChanOut)
-				continue
-			}
-
-			if finished {
-				finish(trainer0ChanOut, trainer1ChanOut)
-				return nil
-			} else {
-				updateClients(trade, trainer0ChanOut, trainer1ChanOut)
-			}
+		case msgStr := <-*lobby.TrainerInChannels[0]:
+			handleChannelMessage(msgStr, 0, trade, lobby)
+		case msgStr := <-*lobby.TrainerInChannels[1]:
+			handleChannelMessage(msgStr, 1, trade, lobby)
 		}
 	}
+}
+
+func handleChannelMessage(msgStr *string, trainerNum int, trade *trades.TradeStatus, lobby *ws.Lobby) bool {
+	trainerChanOut := *lobby.TrainerOutChannels[trainerNum]
+
+	log.Infof(*msgStr)
+	err, msg := trades.ParseMessage(msgStr)
+	if err != nil {
+		handleMessageError(err, trainerChanOut)
+		return false
+	}
+
+	err, finished := handleMessage(msg, trade, 1)
+
+	if err != nil {
+		handleMessageError(err, trainerChanOut)
+		return false
+	}
+
+	updateClients(trade, lobby)
+
+	if finished {
+		finish(lobby)
+		return true
+	}
+
+	return false
 }
 
 func handleMessage(message *trades.TradeMessage, trade *trades.TradeStatus, trainerNum int) (err error, finished bool) {
@@ -107,12 +90,6 @@ func handleTradeMessage(message *trades.TradeMessage, trade *trades.TradeStatus,
 
 	item := message.MsgArgs[0]
 
-	//if err != nil {
-	//	log.Error("error getting id from hex")
-	//	log.Error(err)
-	//	return err
-	//}
-
 	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, item)
 
 	return nil
@@ -132,17 +109,17 @@ func handleAcceptMessage(message *trades.TradeMessage, trade *trades.TradeStatus
 	return nil
 }
 
-func finish(trainer0ChanOut, trainer1ChanOut chan *string) {
+func finish(lobby *ws.Lobby) {
 	finishMessage := &trades.TradeMessage{
 		MsgType: trades.FINISH,
 		MsgArgs: nil,
 	}
 
-	trades.SendMessage(finishMessage, trainer0ChanOut)
-	trades.SendMessage(finishMessage, trainer1ChanOut)
+	trades.SendMessage(finishMessage, *lobby.TrainerOutChannels[0])
+	trades.SendMessage(finishMessage, *lobby.TrainerOutChannels[1])
 }
 
-func updateClients(trade *trades.TradeStatus, trainer0ChanOut, trainer1ChanOut chan *string) {
+func updateClients(trade *trades.TradeStatus, lobby *ws.Lobby) {
 	tradeJSON, err := json.Marshal((*trade).Players)
 
 	log.Info(string(tradeJSON))
@@ -157,8 +134,8 @@ func updateClients(trade *trades.TradeStatus, trainer0ChanOut, trainer1ChanOut c
 		MsgArgs: []string{string(tradeJSON)},
 	}
 
-	trades.SendMessage(msg, trainer0ChanOut)
-	trades.SendMessage(msg, trainer1ChanOut)
+	trades.SendMessage(msg, *lobby.TrainerOutChannels[0])
+	trades.SendMessage(msg, *lobby.TrainerOutChannels[1])
 }
 
 func checkIfBattleFinished(trade *trades.TradeStatus) bool {

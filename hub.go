@@ -121,6 +121,9 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	ws.CloseLobby(lobby)
 
+
+	commitChanges(lobby)
+
 	delete(hub.Trades, lobbyId)
 }
 
