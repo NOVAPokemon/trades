@@ -66,7 +66,7 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err, trainer1 := trainerdb.GetTrainerByUsername(claims.Username)
+	trainer1, err := trainerdb.GetTrainerByUsername(claims.Username)
 
 	if err != nil {
 		handleError(&w, "Error retrieving trainer", err)
@@ -75,8 +75,10 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	lobbyId := primitive.NewObjectID()
 	lobby := ws.NewLobby(lobbyId)
-	ws.AddTrainer(lobby, trainer1, conn)
+	ws.AddTrainer(lobby, *trainer1, conn)
 	hub.Trades[lobbyId] = lobby
+
+	go cleanLobby(lobby)
 }
 
 func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
@@ -108,23 +110,23 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err, trainer2 := trainerdb.GetTrainerByUsername(claims.Username)
+	trainer2, err := trainerdb.GetTrainerByUsername(claims.Username)
 
 	if err != nil {
 		handleError(&w, "Error retrieving trainer with such id", err)
 		return
 	}
 
-	ws.AddTrainer(lobby, trainer2, conn2)
-	StartTrade(lobby)
-	log.Info("Finished trade")
+	ws.AddTrainer(lobby, *trainer2, conn2)
+	err = StartTrade(lobby)
+
+	if err != nil {
+		log.Error(err)
+	} else {
+		log.Info("Finished trade")
+	}
 
 	ws.CloseLobby(lobby)
-
-
-	commitChanges(lobby)
-
-	delete(hub.Trades, lobbyId)
 }
 
 func handleError(w *http.ResponseWriter, errorString string, err error) {
@@ -133,3 +135,12 @@ func handleError(w *http.ResponseWriter, errorString string, err error) {
 	return
 }
 
+func cleanLobby(lobby *ws.Lobby) {
+	for {
+		select {
+		case <-lobby.EndConnectionChannel:
+			delete(hub.Trades, lobby.Id)
+			return
+		}
+	}
+}

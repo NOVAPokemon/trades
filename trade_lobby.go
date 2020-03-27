@@ -8,7 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func StartTrade(lobby *ws.Lobby) {
+func StartTrade(lobby *ws.Lobby) error {
 	players := [2]trades.Players{
 		{Items: []string{}, Accepted: false},
 		{Items: []string{}, Accepted: false},
@@ -18,24 +18,31 @@ func StartTrade(lobby *ws.Lobby) {
 		Players: players,
 	}
 
-	err := tradeMainLoop(lobby, tradeStatus)
-	if err != nil {
-		log.Error(err)
-	}
+	return tradeMainLoop(lobby, tradeStatus)
 }
 
 func tradeMainLoop(lobby *ws.Lobby, trade *trades.TradeStatus) error {
 	for {
 		select {
-		case msgStr := <-*lobby.TrainerInChannels[0]:
-			handleChannelMessage(msgStr, 0, trade, lobby)
-		case msgStr := <-*lobby.TrainerInChannels[1]:
-			handleChannelMessage(msgStr, 1, trade, lobby)
+		case msgStr, ok := <-*lobby.TrainerInChannels[0]:
+			if handleChannelMessage(msgStr, ok, 0, trade, lobby) {
+				return nil
+			}
+		case msgStr, ok := <-*lobby.TrainerInChannels[1]:
+			if handleChannelMessage(msgStr, ok, 1, trade, lobby) {
+				return nil
+			}
+		case <-lobby.EndConnectionChannel:
+			return errors.New("error during trade")
 		}
 	}
 }
 
-func handleChannelMessage(msgStr *string, trainerNum int, trade *trades.TradeStatus, lobby *ws.Lobby) bool {
+func handleChannelMessage(msgStr *string, ok bool, trainerNum int, trade *trades.TradeStatus, lobby *ws.Lobby) bool {
+	if !ok {
+		return false
+	}
+
 	trainerChanOut := *lobby.TrainerOutChannels[trainerNum]
 
 	log.Infof(*msgStr)
@@ -45,7 +52,7 @@ func handleChannelMessage(msgStr *string, trainerNum int, trade *trades.TradeSta
 		return false
 	}
 
-	err, finished := handleMessage(msg, trade, 1)
+	err, finished := handleMessage(msg, trade, trainerNum)
 
 	if err != nil {
 		handleMessageError(err, trainerChanOut)
@@ -110,6 +117,8 @@ func handleAcceptMessage(message *trades.TradeMessage, trade *trades.TradeStatus
 }
 
 func finish(lobby *ws.Lobby) {
+	lobby.Finished = true
+
 	finishMessage := &trades.TradeMessage{
 		MsgType: trades.FINISH,
 		MsgArgs: nil,
