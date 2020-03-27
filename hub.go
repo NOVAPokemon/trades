@@ -6,6 +6,7 @@ import (
 	"github.com/NOVAPokemon/utils"
 	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
 	ws "github.com/NOVAPokemon/utils/websockets"
+	"github.com/NOVAPokemon/utils/websockets/trades"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
@@ -118,12 +119,15 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	ws.AddTrainer(lobby, *trainer2, conn2)
-	err = StartTrade(lobby)
+	err, trade := StartTrade(lobby)
 
 	if err != nil {
 		log.Error(err)
-	} else {
+	} else if lobby.Finished {
 		log.Info("Finished trade")
+		commitChanges(lobby, trade)
+	} else {
+		log.Error("Something went wrong...")
 	}
 
 	ws.CloseLobby(lobby)
@@ -142,5 +146,36 @@ func cleanLobby(lobby *ws.Lobby) {
 			delete(hub.Trades, lobby.Id)
 			return
 		}
+	}
+}
+
+func commitChanges(lobby *ws.Lobby, trade *trades.TradeStatus) {
+	trainer1 := lobby.Trainers[0]
+	trainer2 := lobby.Trainers[1]
+
+	items1 := trade.Players[0].Items
+	items2 := trade.Players[1].Items
+
+	if len(items1) > 0 {
+		tradeItems(trainer1.Username, trainer2.Username, items1)
+	}
+	if len(items2) > 0 {
+		tradeItems(trainer2.Username, trainer1.Username, items2)
+	}
+}
+
+func tradeItems(fromUsername, toUsername string, itemsHex []string) {itemObjects := make([]primitive.ObjectID, len(itemsHex))
+	for i, item := range itemsHex {
+		itemObjects[i], _ = primitive.ObjectIDFromHex(item)
+	}
+
+	items, err := trainerdb.RemoveItemsFromTrainer(fromUsername, itemObjects)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	_, err = trainerdb.AddItemsToTrainer(toUsername, items)
+	if err != nil {
+		log.Error(err)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func StartTrade(lobby *ws.Lobby) error {
+func StartTrade(lobby *ws.Lobby) (error, *trades.TradeStatus) {
 	players := [2]trades.Players{
 		{Items: []string{}, Accepted: false},
 		{Items: []string{}, Accepted: false},
@@ -18,7 +18,7 @@ func StartTrade(lobby *ws.Lobby) error {
 		Players: players,
 	}
 
-	return tradeMainLoop(lobby, tradeStatus)
+	return tradeMainLoop(lobby, tradeStatus), tradeStatus
 }
 
 func tradeMainLoop(lobby *ws.Lobby, trade *trades.TradeStatus) error {
