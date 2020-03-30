@@ -10,10 +10,10 @@ import (
 	"time"
 )
 
-const host = "localhost"
-const Port = 8003
+const host = utils.Host
+const port = utils.TradesPort
 
-var addr = fmt.Sprintf("%s:%d", host, Port)
+var addr = fmt.Sprintf("%s:%d", host, port)
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -25,6 +25,6 @@ func main() {
 
 	r := utils.NewRouter(routes)
 
-	log.Infof("Starting TRADES server in port %d...\n", Port)
+	log.Infof("Starting TRADES server in port %d...\n", port)
 	log.Fatal(http.ListenAndServe(addr, r))
 }

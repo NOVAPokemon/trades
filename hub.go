@@ -175,6 +175,8 @@ func tradeItems(fromUsername, toUsername string, itemsHex []string) {
 		log.Error(err)
 		return
 	}
+
+
 	_, err = trainerdb.AddItemsToTrainer(toUsername, items)
 	if err != nil {
 		log.Error(err)
