@@ -93,8 +93,6 @@ func handleTradeMessage(message *trades.TradeMessage, trade *trades.TradeStatus,
 		return errors.New("can only add one item to trade at a time")
 	}
 
-	//TODO verify that item is in jwt
-
 	item := message.MsgArgs[0]
 
 	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, item)

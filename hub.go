@@ -164,7 +164,8 @@ func commitChanges(lobby *ws.Lobby, trade *trades.TradeStatus) {
 	}
 }
 
-func tradeItems(fromUsername, toUsername string, itemsHex []string) {itemObjects := make([]primitive.ObjectID, len(itemsHex))
+func tradeItems(fromUsername, toUsername string, itemsHex []string) {
+	itemObjects := make([]primitive.ObjectID, len(itemsHex))
 	for i, item := range itemsHex {
 		itemObjects[i], _ = primitive.ObjectIDFromHex(item)
 	}
