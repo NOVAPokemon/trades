@@ -1,15 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
-	"github.com/NOVAPokemon/authentication/auth"
+	"fmt"
+	trainers "github.com/NOVAPokemon/trainers/exported"
 	"github.com/NOVAPokemon/utils"
+	"github.com/NOVAPokemon/utils/cookies"
 	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"strings"
 )
 
@@ -22,7 +27,7 @@ type Hub struct {
 func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	var availableLobbies = make([]utils.Lobby, 0)
 
-	err, _ := auth.VerifyJWT(&w, r, TradeName)
+	_, err := cookies.ExtractAndVerifyAuthToken(&w, r, TradeName)
 
 	if err != nil {
 		log.Error("Unauthenticated client")
@@ -33,7 +38,7 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		if !lobby.Started {
 			availableLobbies = append(availableLobbies, utils.Lobby{
 				Id:       id,
-				Username: lobby.Trainers[0].Username,
+				Username: lobby.TrainerUsernames[0],
 			})
 		}
 	}
@@ -61,22 +66,19 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err, claims := auth.VerifyJWT(&w, r, TradeName)
-
+	authClaims, err := cookies.ExtractAndVerifyAuthToken(&w, r, TradeName)
 	if err != nil {
 		return
 	}
 
-	trainer1, err := trainerdb.GetTrainerByUsername(claims.Username)
-
+	itemsClaims, err := cookies.ExtractItemsToken(r)
 	if err != nil {
-		handleError(&w, "Error retrieving trainer", err)
 		return
 	}
 
 	lobbyId := primitive.NewObjectID()
 	lobby := ws.NewLobby(lobbyId)
-	ws.AddTrainer(lobby, *trainer1, conn)
+	ws.AddTrainer(lobby, authClaims.Username, conn)
 	hub.Trades[lobbyId] = lobby
 
 	go cleanLobby(lobby)
@@ -90,7 +92,7 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err, claims := auth.VerifyJWT(&w, r, TradeName)
+	claims, err := cookies.ExtractAndVerifyAuthToken(&w, r, TradeName)
 
 	if err != nil {
 		return
@@ -176,9 +178,46 @@ func tradeItems(fromUsername, toUsername string, itemsHex []string) {
 		return
 	}
 
-
 	_, err = trainerdb.AddItemsToTrainer(toUsername, items)
 	if err != nil {
 		log.Error(err)
 	}
+}
+
+func checkItemsToken(itemsHash []byte, cookie *http.Cookie) bool {
+	jar, err := cookiejar.New(nil)
+	host := fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort)
+	trainerUrl := url.URL{
+		Scheme: "http",
+		Host:   host,
+		Path:   trainers.VerifyItemsPath,
+	}
+
+	jar.SetCookies(&trainerUrl, []*http.Cookie{cookie})
+
+	httpClient := &http.Client{
+		Jar: jar,
+	}
+
+	jsonStr, err := json.Marshal(itemsHash)
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+
+	req, err := http.NewRequest("POST", trainerUrl.String(), bytes.NewBuffer(jsonStr))
+
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	return true
 }

@@ -27,7 +27,7 @@ var routes = utils.Routes{
 	utils.Route{
 		Name:        JoinTradeName,
 		Method:      GET,
-		Pattern:     exported.JoinTradePath,
+		Pattern:     exported.JoinTradeRoute,
 		HandlerFunc: JoinTradeLobby,
 	},
 }
