@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	trainers "github.com/NOVAPokemon/trainers/exported"
 	"github.com/NOVAPokemon/utils"
+	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/cookies"
 	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
 	ws "github.com/NOVAPokemon/utils/websockets"
@@ -30,7 +30,7 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	_, err := cookies.ExtractAndVerifyAuthToken(&w, r, TradeName)
 
 	if err != nil {
-		log.Error("Unauthenticated client")
+		log.Error("Unauthenticated clients")
 		return
 	}
 
@@ -105,7 +105,7 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	lobbyId := primitive.NewObjectID()
 	lobby := TradeLobby{
-		wsLobby: ws.NewLobby(lobbyId),
+		wsLobby:        ws.NewLobby(lobbyId),
 		availableItems: [2]trades.ItemsMap{},
 	}
 	lobby.AddTrainer(authClaims.Username, itemsClaims.Items, conn)
@@ -247,7 +247,7 @@ func checkItemsToken(username string, itemsHash []byte, cookies ...*http.Cookie)
 	trainerUrl := url.URL{
 		Scheme: "http",
 		Host:   host,
-		Path:   fmt.Sprintf(trainers.VerifyItemsPath, username),
+		Path:   fmt.Sprintf(api.VerifyItemsPath, username),
 	}
 
 	jar.SetCookies(&url.URL{

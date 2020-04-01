@@ -36,7 +36,7 @@ func (lobby *TradeLobby) StartTrade() error {
 func (lobby *TradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
 	var trainerNum int
-	var tradeMessage *trades.TradeMessage
+	var tradeMessage *ws.Message
 	var msgStr *string
 	for {
 		select {
@@ -80,7 +80,7 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 func (lobby *TradeLobby) finish() {
 	wsLobby := lobby.wsLobby
 
-	finishMessage := &trades.TradeMessage{
+	finishMessage := &ws.Message{
 		MsgType: trades.FINISH,
 		MsgArgs: nil,
 	}
@@ -89,12 +89,12 @@ func (lobby *TradeLobby) finish() {
 }
 
 func handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,
-	status *trades.TradeStatus, trainerNum int) *trades.TradeMessage {
+	status *trades.TradeStatus, trainerNum int) *ws.Message {
 
 	log.Infof(*msgStr)
-	err, msg := trades.ParseMessage(msgStr)
+	err, msg := ws.ParseMessage(msgStr)
 	if err != nil {
-		return &trades.TradeMessage{
+		return &ws.Message{
 			MsgType: trades.ERROR,
 			MsgArgs: []string{"error parsing message"},
 		}
@@ -103,8 +103,8 @@ func handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,
 	return handleMessage(msg, availableItems, status, trainerNum)
 }
 
-func handleMessage(message *trades.TradeMessage, availableItems *[2]trades.ItemsMap,
-	status *trades.TradeStatus, trainerNum int) *trades.TradeMessage {
+func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
+	status *trades.TradeStatus, trainerNum int) *ws.Message {
 	log.Info(message.MsgType)
 
 	switch message.MsgType {
@@ -113,30 +113,30 @@ func handleMessage(message *trades.TradeMessage, availableItems *[2]trades.Items
 	case trades.ACCEPT:
 		return handleAcceptMessage(message, status, trainerNum)
 	default:
-		return &trades.TradeMessage{MsgType: trades.ERROR, MsgArgs: []string{"invalid msg type"}}
+		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{"invalid msg type"}}
 	}
 }
 
-func handleTradeMessage(message *trades.TradeMessage, availableItems *[2]trades.ItemsMap,
-	trade *trades.TradeStatus, trainerNum int) *trades.TradeMessage {
+func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
+	trade *trades.TradeStatus, trainerNum int) *ws.Message {
 	if len(message.MsgArgs) > 1 {
-		return &trades.TradeMessage{MsgType: trades.ERROR, MsgArgs: []string{"can only add one item to trade at a time"}}
+		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{"can only add one item to trade at a time"}}
 	}
 
 	itemId := message.MsgArgs[0]
 	item, ok := (*availableItems)[trainerNum][itemId]
 	if !ok {
-		return &trades.TradeMessage{MsgType: trades.ERROR, MsgArgs: []string{"you dont have that item"}}
+		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{"you dont have that item"}}
 	}
 
 	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, &item)
-	return &trades.TradeMessage{MsgType: trades.UPDATE, MsgArgs: []string{fmt.Sprintf("%+v", *trade)}}
+	return &ws.Message{MsgType: trades.UPDATE, MsgArgs: []string{fmt.Sprintf("%+v", *trade)}}
 
 }
 
-func handleAcceptMessage(message *trades.TradeMessage, trade *trades.TradeStatus, trainerNum int) *trades.TradeMessage {
+func handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus, trainerNum int) *ws.Message {
 	if len(message.MsgArgs) != 0 {
-		return &trades.TradeMessage{
+		return &ws.Message{
 			MsgType: trades.ERROR,
 			MsgArgs: []string{"accept should not take any args"},
 		}
@@ -148,12 +148,12 @@ func handleAcceptMessage(message *trades.TradeMessage, trade *trades.TradeStatus
 		trade.TradeFinished = true
 	}
 
-	return &trades.TradeMessage{MsgType: trades.UPDATE, MsgArgs: []string{fmt.Sprintf("%+v", *trade)}}
+	return &ws.Message{MsgType: trades.UPDATE, MsgArgs: []string{fmt.Sprintf("%+v", *trade)}}
 }
 
-func updateClients(msg *trades.TradeMessage, sendTo ...*chan *string) {
+func updateClients(msg *ws.Message, sendTo ...*chan *string) {
 	for _, channel := range sendTo {
-		trades.SendMessage(msg, *channel)
+		ws.SendMessage(*msg, *channel)
 	}
 }
 

@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/NOVAPokemon/trades/exported"
 	"github.com/NOVAPokemon/utils"
+	"github.com/NOVAPokemon/utils/api"
 )
 
 const GetTradesName = "GET_TRADES"
@@ -20,19 +20,19 @@ var routes = utils.Routes{
 	utils.Route{
 		Name:        GetTradesName,
 		Method:      GET,
-		Pattern:     exported.GetTradesPath,
+		Pattern:     api.GetTradesPath,
 		HandlerFunc: GetCurrentLobbies,
 	},
 	utils.Route{
 		Name:        StartTradeName,
 		Method:      GET,
-		Pattern:     exported.StartTradePath,
+		Pattern:     api.StartTradePath,
 		HandlerFunc: CreateTradeLobby,
 	},
 	utils.Route{
 		Name:        JoinTradeName,
 		Method:      GET,
-		Pattern:     JoinTradeRoute,
+		Pattern:     api.JoinTradeRoute,
 		HandlerFunc: JoinTradeLobby,
 	},
 }
