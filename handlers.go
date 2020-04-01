@@ -1,13 +1,12 @@
 package main
 
 import (
-	ws "github.com/NOVAPokemon/utils/websockets"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
 )
 
 var hub = &Hub{
-	Trades: make(map[primitive.ObjectID]*ws.Lobby),
+	Trades: make(map[primitive.ObjectID]*TradeLobby),
 }
 
 func GetCurrentLobbies(w http.ResponseWriter, r *http.Request) {

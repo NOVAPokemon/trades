@@ -10,18 +10,18 @@ import (
 	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
+	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"strings"
 )
 
 const TradeName = "TRADES"
 
 type Hub struct {
-	Trades map[primitive.ObjectID]*ws.Lobby
+	Trades map[primitive.ObjectID]*TradeLobby
 }
 
 func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
@@ -35,10 +35,10 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	for id, lobby := range hub.Trades {
-		if !lobby.Started {
+		if !lobby.wsLobby.Started {
 			availableLobbies = append(availableLobbies, utils.Lobby{
 				Id:       id,
-				Username: lobby.TrainerUsernames[0],
+				Username: lobby.wsLobby.TrainerUsernames[0],
 			})
 		}
 	}
@@ -61,6 +61,8 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 
+	log.Info(hub.Trades)
+
 	if err != nil {
 		handleError(&w, "Could not upgrade to websocket", err)
 		return
@@ -71,17 +73,47 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for _, cookie := range r.Cookies() {
+		log.Warn(cookie.Name)
+		log.Info(cookie.Domain)
+		log.Info(cookie.Path)
+	}
+
 	itemsClaims, err := cookies.ExtractItemsToken(r)
 	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	itemsCookie, err := r.Cookie(cookies.ItemsTokenCookieName)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	authCookie, err := r.Cookie(cookies.AuthTokenCookieName)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	if !checkItemsToken(authClaims.Username, itemsClaims.ItemsHash, itemsCookie, authCookie) {
+		log.Error("items token not valid")
+		conn.Close()
 		return
 	}
 
 	lobbyId := primitive.NewObjectID()
-	lobby := ws.NewLobby(lobbyId)
-	ws.AddTrainer(lobby, authClaims.Username, conn)
-	hub.Trades[lobbyId] = lobby
+	lobby := TradeLobby{
+		wsLobby: ws.NewLobby(lobbyId),
+		availableItems: [2]trades.ItemsMap{},
+	}
+	lobby.AddTrainer(authClaims.Username, itemsClaims.Items, conn)
+	hub.Trades[lobbyId] = &lobby
 
-	go cleanLobby(lobby)
+	log.Info(hub.Trades)
+
+	go cleanLobby(lobby.wsLobby)
 }
 
 func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
@@ -98,41 +130,61 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	splitPath := strings.Split(r.URL.Path, "/")
-	lobbyId, err := primitive.ObjectIDFromHex(splitPath[len(splitPath)-1])
+	vars := mux.Vars(r)
+	lobbyIdHex, ok := vars[TradeIdVar]
+	if !ok {
+		handleError(&w, "No battle id provided", err)
+		return
+	}
 
+	lobbyId, err := primitive.ObjectIDFromHex(lobbyIdHex)
 	if err != nil {
 		handleError(&w, "Battle id invalid", err)
 		return
 	}
 
-	lobby := hub.Trades[lobbyId]
+	itemsClaims, err := cookies.ExtractItemsToken(r)
+	if err != nil {
+		return
+	}
 
-	if lobby == nil {
+	itemsCookie, err := r.Cookie(cookies.ItemsTokenCookieName)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	authCookie, err := r.Cookie(cookies.AuthTokenCookieName)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	if !checkItemsToken(claims.Username, itemsClaims.ItemsHash, itemsCookie, authCookie) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	lobby, ok := hub.Trades[lobbyId]
+	if !ok {
 		handleError(&w, "Trade missing", err)
 		return
 	}
 
-	trainer2, err := trainerdb.GetTrainerByUsername(claims.Username)
+	lobby.AddTrainer(claims.Username, itemsClaims.Items, conn2)
 
-	if err != nil {
-		handleError(&w, "Error retrieving trainer with such id", err)
-		return
-	}
-
-	ws.AddTrainer(lobby, *trainer2, conn2)
-	err, trade := StartTrade(lobby)
+	err = lobby.StartTrade()
 
 	if err != nil {
 		log.Error(err)
-	} else if lobby.Finished {
+	} else if lobby.status.TradeFinished {
 		log.Info("Finished trade")
-		commitChanges(lobby, trade)
+		commitChanges(lobby.wsLobby, lobby.status)
 	} else {
 		log.Error("Something went wrong...")
 	}
 
-	ws.CloseLobby(lobby)
+	ws.CloseLobby(lobby.wsLobby)
 }
 
 func handleError(w *http.ResponseWriter, errorString string, err error) {
@@ -152,27 +204,27 @@ func cleanLobby(lobby *ws.Lobby) {
 }
 
 func commitChanges(lobby *ws.Lobby, trade *trades.TradeStatus) {
-	trainer1 := lobby.Trainers[0]
-	trainer2 := lobby.Trainers[1]
+	trainer1Username := lobby.TrainerUsernames[0]
+	trainer2Username := lobby.TrainerUsernames[1]
 
 	items1 := trade.Players[0].Items
 	items2 := trade.Players[1].Items
 
 	if len(items1) > 0 {
-		tradeItems(trainer1.Username, trainer2.Username, items1)
+		tradeItems(trainer1Username, trainer2Username, items1)
 	}
 	if len(items2) > 0 {
-		tradeItems(trainer2.Username, trainer1.Username, items2)
+		tradeItems(trainer2Username, trainer1Username, items2)
 	}
 }
 
-func tradeItems(fromUsername, toUsername string, itemsHex []string) {
-	itemObjects := make([]primitive.ObjectID, len(itemsHex))
-	for i, item := range itemsHex {
-		itemObjects[i], _ = primitive.ObjectIDFromHex(item)
+func tradeItems(fromUsername, toUsername string, items []*utils.Item) {
+	itemIds := make([]primitive.ObjectID, len(items))
+	for i, item := range items {
+		itemIds[i] = item.Id
 	}
 
-	items, err := trainerdb.RemoveItemsFromTrainer(fromUsername, itemObjects)
+	_, err := trainerdb.RemoveItemsFromTrainer(fromUsername, itemIds)
 	if err != nil {
 		log.Error(err)
 		return
@@ -184,16 +236,25 @@ func tradeItems(fromUsername, toUsername string, itemsHex []string) {
 	}
 }
 
-func checkItemsToken(itemsHash []byte, cookie *http.Cookie) bool {
+func checkItemsToken(username string, itemsHash []byte, cookies ...*http.Cookie) bool {
 	jar, err := cookiejar.New(nil)
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+
 	host := fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort)
 	trainerUrl := url.URL{
 		Scheme: "http",
 		Host:   host,
-		Path:   trainers.VerifyItemsPath,
+		Path:   fmt.Sprintf(trainers.VerifyItemsPath, username),
 	}
 
-	jar.SetCookies(&trainerUrl, []*http.Cookie{cookie})
+	jar.SetCookies(&url.URL{
+		Scheme: "http",
+		Host:   utils.Host,
+		Path:   "/",
+	}, cookies)
 
 	httpClient := &http.Client{
 		Jar: jar,
@@ -212,11 +273,20 @@ func checkItemsToken(itemsHash []byte, cookie *http.Cookie) bool {
 		return false
 	}
 
+	for _, cookie := range jar.Cookies(&trainerUrl) {
+		log.Info(cookie)
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Error(err)
+		return false
+	}
 
 	if resp.StatusCode != http.StatusOK {
+		log.Error("status: ", resp.StatusCode)
 		return false
 	}
 	return true
