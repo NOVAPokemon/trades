@@ -131,7 +131,7 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-	lobbyIdHex, ok := vars[TradeIdVar]
+	lobbyIdHex, ok := vars[api.TradeIdVar]
 	if !ok {
 		handleError(&w, "No battle id provided", err)
 		return
