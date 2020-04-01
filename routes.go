@@ -10,6 +10,7 @@ const StartTradeName = "START_TRADE"
 const JoinTradeName = "JOIN_TRADE"
 
 const GET = "GET"
+const POST = "POST"
 
 var routes = utils.Routes{
 	utils.Route{
@@ -20,7 +21,7 @@ var routes = utils.Routes{
 	},
 	utils.Route{
 		Name:        StartTradeName,
-		Method:      GET,
+		Method:      POST,
 		Pattern:     api.StartTradePath,
 		HandlerFunc: CreateTradeLobby,
 	},

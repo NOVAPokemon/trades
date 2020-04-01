@@ -1,21 +1,21 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
+	"github.com/NOVAPokemon/utils/clients"
 	"github.com/NOVAPokemon/utils/cookies"
 	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
+	"github.com/NOVAPokemon/utils/notifications"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 )
 
 const TradeName = "TRADES"
@@ -23,6 +23,9 @@ const TradeName = "TRADES"
 type Hub struct {
 	Trades map[primitive.ObjectID]*TradeLobby
 }
+
+var trainersClient = clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), nil)
+var notificationsClient = clients.NewNotificationClient(fmt.Sprintf("%s:%d", utils.Host, utils.NotificationsPort), nil, nil)
 
 func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	var availableLobbies = make([]utils.Lobby, 0)
@@ -45,7 +48,6 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	log.Infof("Request for trade lobbies, response %+v", availableLobbies)
 	js, err := json.Marshal(availableLobbies)
-
 	if err != nil {
 		handleError(&w, "Error marshalling json", err)
 	}
@@ -59,12 +61,10 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-
-	log.Info(hub.Trades)
-
+	var request api.CreateLobbyRequest
+	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
-		handleError(&w, "Could not upgrade to websocket", err)
+		utils.HandleJSONDecodeError(&w, TradeName, err)
 		return
 	}
 
@@ -73,23 +73,7 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, cookie := range r.Cookies() {
-		log.Warn(cookie.Name)
-		log.Info(cookie.Domain)
-		log.Info(cookie.Path)
-	}
-
-	itemsClaims, err := cookies.ExtractItemsToken(r)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	itemsCookie, err := r.Cookie(cookies.ItemsTokenCookieName)
-	if err != nil {
-		log.Error(err)
-		return
-	}
+	lobbyId := primitive.NewObjectID()
 
 	authCookie, err := r.Cookie(cookies.AuthTokenCookieName)
 	if err != nil {
@@ -97,49 +81,71 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !checkItemsToken(authClaims.Username, itemsClaims.ItemsHash, itemsCookie, authCookie) {
-		log.Error("items token not valid")
-		conn.Close()
+	if postNotification(authClaims.Username, request.Username, lobbyId.Hex(), authCookie) != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	lobbyId := primitive.NewObjectID()
 	lobby := TradeLobby{
+		expected:       [2]string{authClaims.Username, request.Username},
 		wsLobby:        ws.NewLobby(lobbyId),
 		availableItems: [2]trades.ItemsMap{},
 	}
-	lobby.AddTrainer(authClaims.Username, itemsClaims.Items, conn)
-	hub.Trades[lobbyId] = &lobby
 
-	log.Info(hub.Trades)
+	lobbyBytes, err := json.Marshal(lobbyId)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, err = w.Write(lobbyBytes)
+	if err != nil {
+		handleError(&w, "Error writing json to body", err)
+	}
+
+	hub.Trades[lobbyId] = &lobby
+	log.Info("created lobby ", lobbyId)
 
 	go cleanLobby(lobby.wsLobby)
 }
 
 func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	conn2, err := upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
-		handleError(&w, "Connection error", err)
+		closeConnAndHandleError(conn, &w, "Connection error", err)
 		return
 	}
 
 	claims, err := cookies.ExtractAndVerifyAuthToken(&w, r, TradeName)
-
 	if err != nil {
+		closeConnAndHandleError(conn, &w, "could not extract auth token", err)
 		return
 	}
 
 	vars := mux.Vars(r)
 	lobbyIdHex, ok := vars[api.TradeIdVar]
 	if !ok {
-		handleError(&w, "No battle id provided", err)
+		closeConnAndHandleError(conn, &w, "No trade id provided", err)
 		return
 	}
 
 	lobbyId, err := primitive.ObjectIDFromHex(lobbyIdHex)
 	if err != nil {
-		handleError(&w, "Battle id invalid", err)
+		closeConnAndHandleError(conn, &w, "Trade id invalid", err)
+		return
+	}
+
+	lobby := hub.Trades[lobbyId]
+
+	if !ok {
+		closeConnAndHandleError(conn, &w, "Trade missing", err)
+		return
+	}
+
+	if lobby.expected[0] != claims.Username && lobby.expected[1] != claims.Username {
+		closeConnAndHandleError(conn, &w, "player not expected in lobby", nil)
 		return
 	}
 
@@ -165,29 +171,32 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lobby, ok := hub.Trades[lobbyId]
-	if !ok {
-		handleError(&w, "Trade missing", err)
+	lobby.AddTrainer(claims.Username, itemsClaims.Items, conn)
+
+	if lobby.wsLobby.TrainersJoined == 2 {
+		err = lobby.StartTrade()
+		if err != nil {
+			log.Error(err)
+		} else if lobby.status.TradeFinished {
+			log.Info("Finished trade")
+			commitChanges(lobby.wsLobby, lobby.status)
+		} else {
+			log.Error("Something went wrong...")
+		}
+		ws.CloseLobby(lobby.wsLobby)
+	} else {
 		return
 	}
 
-	lobby.AddTrainer(claims.Username, itemsClaims.Items, conn2)
+}
 
-	err = lobby.StartTrade()
-
-	if err != nil {
-		log.Error(err)
-	} else if lobby.status.TradeFinished {
-		log.Info("Finished trade")
-		commitChanges(lobby.wsLobby, lobby.status)
-	} else {
-		log.Error("Something went wrong...")
-	}
-
-	ws.CloseLobby(lobby.wsLobby)
+func closeConnAndHandleError(conn *websocket.Conn, w *http.ResponseWriter, errorString string, err error) {
+	conn.Close()
+	handleError(w, errorString, err)
 }
 
 func handleError(w *http.ResponseWriter, errorString string, err error) {
+	log.Error(errorString)
 	log.Error(err)
 	http.Error(*w, errorString, http.StatusInternalServerError)
 	return
@@ -237,57 +246,50 @@ func tradeItems(fromUsername, toUsername string, items []*utils.Item) {
 }
 
 func checkItemsToken(username string, itemsHash []byte, cookies ...*http.Cookie) bool {
-	jar, err := cookiejar.New(nil)
+	jar, err := clients.CreateJarWithCookies(cookies...)
 	if err != nil {
 		log.Error(err)
 		return false
 	}
 
-	host := fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort)
-	trainerUrl := url.URL{
-		Scheme: "http",
-		Host:   host,
-		Path:   fmt.Sprintf(api.VerifyItemsPath, username),
-	}
+	trainersClient.SetJar(jar)
 
-	jar.SetCookies(&url.URL{
-		Scheme: "http",
-		Host:   utils.Host,
-		Path:   "/",
-	}, cookies)
-
-	httpClient := &http.Client{
-		Jar: jar,
-	}
-
-	jsonStr, err := json.Marshal(itemsHash)
+	verify, err := trainersClient.VerifyItems(username, itemsHash)
 	if err != nil {
 		log.Error(err)
 		return false
 	}
 
-	req, err := http.NewRequest("POST", trainerUrl.String(), bytes.NewBuffer(jsonStr))
+	log.Warn("hashes are equal: ", *verify)
+
+	return *verify
+}
+
+func postNotification(sender, receiver, lobbyId string, cookies ...*http.Cookie) error {
+	jar, err := clients.CreateJarWithCookies(cookies...)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	notificationsClient.SetJar(jar)
+
+	contentBytes, err := json.Marshal(notifications.WantsToTradeContent{Username: sender, LobbyId: lobbyId})
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	err = notificationsClient.AddNotification(utils.Notification{
+		Username: receiver,
+		Type:     notifications.WantsToTrade,
+		Content:  contentBytes,
+	})
 
 	if err != nil {
 		log.Error(err)
-		return false
+		return err
 	}
 
-	for _, cookie := range jar.Cookies(&trainerUrl) {
-		log.Info(cookie)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		log.Error(err)
-		return false
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		log.Error("status: ", resp.StatusCode)
-		return false
-	}
-	return true
+	return nil
 }

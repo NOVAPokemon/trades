@@ -11,6 +11,7 @@ import (
 )
 
 type TradeLobby struct {
+	expected       [2]string
 	wsLobby        *ws.Lobby
 	status         *trades.TradeStatus
 	availableItems [2]trades.ItemsMap
