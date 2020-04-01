@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 )
@@ -11,10 +10,6 @@ const StartTradeName = "START_TRADE"
 const JoinTradeName = "JOIN_TRADE"
 
 const GET = "GET"
-
-const TradeIdVar = "tradeId"
-
-var JoinTradeRoute = fmt.Sprintf("/trades/join/{%s}", TradeIdVar)
 
 var routes = utils.Routes{
 	utils.Route{
