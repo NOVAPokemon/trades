@@ -92,7 +92,6 @@ func (lobby *TradeLobby) finish() {
 func handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,
 	status *trades.TradeStatus, trainerNum int) *ws.Message {
 
-	log.Infof(*msgStr)
 	err, msg := ws.ParseMessage(msgStr)
 	if err != nil {
 		return &ws.Message{
@@ -106,7 +105,6 @@ func handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,
 
 func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	status *trades.TradeStatus, trainerNum int) *ws.Message {
-	log.Info(message.MsgType)
 
 	switch message.MsgType {
 	case trades.TRADE:
@@ -114,7 +112,7 @@ func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	case trades.ACCEPT:
 		return handleAcceptMessage(message, status, trainerNum)
 	default:
-		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{"invalid msg type"}}
+		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{fmt.Sprintf("invalid msg type %s", message.MsgType )}}
 	}
 }
 
@@ -127,7 +125,7 @@ func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	itemId := message.MsgArgs[0]
 	item, ok := (*availableItems)[trainerNum][itemId]
 	if !ok {
-		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{"you dont have that item"}}
+		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{fmt.Sprintf("you dont have %s", itemId)}}
 	}
 
 	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, &item)
