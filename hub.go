@@ -6,9 +6,9 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
-	"github.com/NOVAPokemon/utils/cookies"
 	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
 	"github.com/NOVAPokemon/utils/notifications"
+	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/mux"
@@ -24,13 +24,13 @@ type Hub struct {
 	Trades map[primitive.ObjectID]*TradeLobby
 }
 
-var trainersClient = clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), nil)
-var notificationsClient = clients.NewNotificationClient(fmt.Sprintf("%s:%d", utils.Host, utils.NotificationsPort), nil, nil)
+var trainersClient = clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort))
+var notificationsClient = clients.NewNotificationClient(fmt.Sprintf("%s:%d", utils.Host, utils.NotificationsPort), nil)
 
 func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	var availableLobbies = make([]utils.Lobby, 0)
 
-	_, err := cookies.ExtractAndVerifyAuthToken(&w, r, TradeName)
+	_, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 
 	if err != nil {
 		log.Error("Unauthenticated clients")
@@ -68,20 +68,14 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authClaims, err := cookies.ExtractAndVerifyAuthToken(&w, r, TradeName)
+	authClaims, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
 		return
 	}
 
 	lobbyId := primitive.NewObjectID()
 
-	authCookie, err := r.Cookie(cookies.AuthTokenCookieName)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	if postNotification(authClaims.Username, request.Username, lobbyId.Hex(), authCookie) != nil {
+	if postNotification(authClaims.Username, request.Username, lobbyId.Hex(), r.Header.Get(tokens.AuthTokenHeaderName)) != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -118,7 +112,7 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, err := cookies.ExtractAndVerifyAuthToken(&w, r, TradeName)
+	claims, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
 		closeConnAndHandleError(conn, &w, "could not extract auth token", err)
 		return
@@ -149,24 +143,12 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	itemsClaims, err := cookies.ExtractItemsToken(r)
+	itemsClaims, err := tokens.ExtractAndVerifyItemsToken(r.Header)
 	if err != nil {
 		return
 	}
 
-	itemsCookie, err := r.Cookie(cookies.ItemsTokenCookieName)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	authCookie, err := r.Cookie(cookies.AuthTokenCookieName)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	if !checkItemsToken(claims.Username, itemsClaims.ItemsHash, itemsCookie, authCookie) {
+	if !checkItemsToken(claims.Username, itemsClaims.ItemsHash) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -246,15 +228,7 @@ func tradeItems(fromUsername, toUsername string, items []*utils.Item) {
 	}
 }
 
-func checkItemsToken(username string, itemsHash []byte, cookies ...*http.Cookie) bool {
-	jar, err := clients.CreateJarWithCookies(cookies...)
-	if err != nil {
-		log.Error(err)
-		return false
-	}
-
-	trainersClient.SetJar(jar)
-
+func checkItemsToken(username string, itemsHash []byte) bool {
 	verify, err := trainersClient.VerifyItems(username, itemsHash)
 	if err != nil {
 		log.Error(err)
@@ -266,15 +240,7 @@ func checkItemsToken(username string, itemsHash []byte, cookies ...*http.Cookie)
 	return *verify
 }
 
-func postNotification(sender, receiver, lobbyId string, cookies ...*http.Cookie) error {
-	jar, err := clients.CreateJarWithCookies(cookies...)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-
-	notificationsClient.SetJar(jar)
-
+func postNotification(sender, receiver, lobbyId string, authToken string) error {
 	contentBytes, err := json.Marshal(notifications.WantsToTradeContent{Username: sender, LobbyId: lobbyId})
 	if err != nil {
 		log.Error(err)
@@ -285,7 +251,7 @@ func postNotification(sender, receiver, lobbyId string, cookies ...*http.Cookie)
 		Username: receiver,
 		Type:     notifications.WantsToTrade,
 		Content:  contentBytes,
-	})
+	}, authToken)
 
 	if err != nil {
 		log.Error(err)
