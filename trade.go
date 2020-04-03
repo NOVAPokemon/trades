@@ -15,10 +15,13 @@ type TradeLobby struct {
 	wsLobby        *ws.Lobby
 	status         *trades.TradeStatus
 	availableItems [2]trades.ItemsMap
+	authTokens     [2]string
+	started        chan struct{}
 }
 
-func (lobby *TradeLobby) AddTrainer(username string, items map[string]utils.Item, trainerConn *websocket.Conn) {
+func (lobby *TradeLobby) AddTrainer(username string, items map[string]utils.Item, authToken string, trainerConn *websocket.Conn) {
 	lobby.availableItems[lobby.wsLobby.TrainersJoined] = items
+	lobby.authTokens[lobby.wsLobby.TrainersJoined] = authToken
 	ws.AddTrainer(lobby.wsLobby, username, trainerConn)
 }
 
@@ -36,6 +39,14 @@ func (lobby *TradeLobby) StartTrade() error {
 
 func (lobby *TradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
+
+	updateClients(&ws.Message{
+		MsgType: trades.START,
+		MsgArgs: nil,
+	}, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
+	close(lobby.started)
+	wsLobby.Started = true
+
 	var trainerNum int
 	var tradeMessage *ws.Message
 	var msgStr *string
@@ -72,14 +83,21 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 
 		if lobby.status.TradeFinished {
 			log.Info("finishing...")
-			lobby.finish()
-			return nil
+			return lobby.finish()
 		}
 	}
 }
 
-func (lobby *TradeLobby) finish() {
+func (lobby *TradeLobby) finish() error {
 	wsLobby := lobby.wsLobby
+
+	if err := lobby.sendTokenToUser(0); err != nil {
+		return err
+	}
+
+	if err := lobby.sendTokenToUser(1); err != nil {
+		return err
+	}
 
 	finishMessage := &ws.Message{
 		MsgType: trades.FINISH,
@@ -87,12 +105,30 @@ func (lobby *TradeLobby) finish() {
 	}
 
 	updateClients(finishMessage, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
+
+	return nil
+}
+
+func (lobby *TradeLobby) sendTokenToUser(trainerNum int) error {
+	err := trainersClient.GetItemsToken(lobby.expected[trainerNum], lobby.authTokens[trainerNum])
+	if err != nil {
+		return err
+	}
+
+	setTokensMessage := &ws.Message{
+		MsgType: trades.SET_TOKEN,
+		MsgArgs: []string{trainersClient.ItemsToken},
+	}
+
+	updateClients(setTokensMessage, lobby.wsLobby.TrainerOutChannels[trainerNum])
+
+	return nil
 }
 
 func handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,
 	status *trades.TradeStatus, trainerNum int) *ws.Message {
 
-	err, msg := ws.ParseMessage(msgStr)
+	msg, err := ws.ParseMessage(msgStr)
 	if err != nil {
 		return &ws.Message{
 			MsgType: trades.ERROR,
@@ -112,7 +148,7 @@ func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	case trades.ACCEPT:
 		return handleAcceptMessage(message, status, trainerNum)
 	default:
-		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{fmt.Sprintf("invalid msg type %s", message.MsgType )}}
+		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{fmt.Sprintf("invalid msg type %s", message.MsgType)}}
 	}
 }
 
@@ -126,6 +162,12 @@ func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	item, ok := (*availableItems)[trainerNum][itemId]
 	if !ok {
 		return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{fmt.Sprintf("you dont have %s", itemId)}}
+	} else {
+		for _, itemAdded := range trade.Players[trainerNum].Items {
+			if itemAdded.Id.Hex() == itemId {
+				return &ws.Message{MsgType: trades.ERROR, MsgArgs: []string{fmt.Sprintf("you already added %s", itemId)}}
+			}
+		}
 	}
 
 	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, &item)

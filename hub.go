@@ -16,12 +16,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
+	"time"
 )
 
 const TradeName = "TRADES"
 
 type Hub struct {
-	Trades map[primitive.ObjectID]*TradeLobby
+	Trades map[string]*TradeLobby
 }
 
 var trainersClient = clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort))
@@ -39,8 +40,13 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	for id, lobby := range hub.Trades {
 		if !lobby.wsLobby.Started {
+			lobbyId, err := primitive.ObjectIDFromHex(id)
+			if err != nil {
+				return
+			}
+
 			availableLobbies = append(availableLobbies, utils.Lobby{
-				Id:       id,
+				Id:       lobbyId,
 				Username: lobby.wsLobby.TrainerUsernames[0],
 			})
 		}
@@ -84,6 +90,7 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		expected:       [2]string{authClaims.Username, request.Username},
 		wsLobby:        ws.NewLobby(lobbyId),
 		availableItems: [2]trades.ItemsMap{},
+		started:        make(chan struct{}),
 	}
 
 	lobbyBytes, err := json.Marshal(lobbyId)
@@ -98,7 +105,7 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		handleError(&w, "Error writing json to body", err)
 	}
 
-	hub.Trades[lobbyId] = &lobby
+	hub.Trades[lobbyId.Hex()] = &lobby
 	log.Info("created lobby ", lobbyId)
 
 	go cleanLobby(lobby.wsLobby)
@@ -131,7 +138,7 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lobby := hub.Trades[lobbyId]
+	lobby := hub.Trades[lobbyId.Hex()]
 
 	if !ok {
 		closeConnAndHandleError(conn, &w, "Trade missing", err)
@@ -148,12 +155,12 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !checkItemsToken(claims.Username, itemsClaims.ItemsHash) {
+	if !checkItemsToken(claims.Username, itemsClaims.ItemsHash, r.Header.Get(tokens.AuthTokenHeaderName)) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	lobby.AddTrainer(claims.Username, itemsClaims.Items, conn)
+	lobby.AddTrainer(claims.Username, itemsClaims.Items, r.Header.Get(tokens.AuthTokenHeaderName), conn)
 
 	if lobby.wsLobby.TrainersJoined == 2 {
 		err = lobby.StartTrade()
@@ -167,7 +174,14 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		}
 		ws.CloseLobby(lobby.wsLobby)
 	} else {
-		return
+		timer := time.NewTimer(10 * time.Second)
+		select {
+		case <-timer.C:
+			ws.CloseLobby(lobby.wsLobby)
+			return
+		case <-lobby.started:
+			return
+		}
 	}
 
 }
@@ -189,7 +203,7 @@ func cleanLobby(lobby *ws.Lobby) {
 	for {
 		select {
 		case <-lobby.EndConnectionChannel:
-			delete(hub.Trades, lobby.Id)
+			delete(hub.Trades, lobby.Id.Hex())
 			return
 		}
 	}
@@ -228,8 +242,8 @@ func tradeItems(fromUsername, toUsername string, items []*utils.Item) {
 	}
 }
 
-func checkItemsToken(username string, itemsHash []byte) bool {
-	verify, err := trainersClient.VerifyItems(username, itemsHash)
+func checkItemsToken(username string, itemsHash []byte, authToken string) bool {
+	verify, err := trainersClient.VerifyItems(username, itemsHash, authToken)
 	if err != nil {
 		log.Error(err)
 		return false

@@ -1,12 +1,11 @@
 package main
 
 import (
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
 )
 
 var hub = &Hub{
-	Trades: make(map[primitive.ObjectID]*TradeLobby),
+	Trades: make(map[string]*TradeLobby),
 }
 
 func GetCurrentLobbies(w http.ResponseWriter, r *http.Request) {
