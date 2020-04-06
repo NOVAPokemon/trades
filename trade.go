@@ -8,6 +8,7 @@ import (
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 type TradeLobby struct {
@@ -15,13 +16,17 @@ type TradeLobby struct {
 	wsLobby        *ws.Lobby
 	status         *trades.TradeStatus
 	availableItems [2]trades.ItemsMap
+	initialHashes  [2][]byte
 	authTokens     [2]string
 	started        chan struct{}
 }
 
-func (lobby *TradeLobby) AddTrainer(username string, items map[string]utils.Item, authToken string, trainerConn *websocket.Conn) {
-	lobby.availableItems[lobby.wsLobby.TrainersJoined] = items
-	lobby.authTokens[lobby.wsLobby.TrainersJoined] = authToken
+func (lobby *TradeLobby) AddTrainer(username string, items map[string]utils.Item, itemsHash []byte,
+	authToken string, trainerConn *websocket.Conn) {
+	numJoined := lobby.wsLobby.TrainersJoined
+	lobby.availableItems[numJoined] = items
+	lobby.authTokens[numJoined] = authToken
+	lobby.initialHashes[numJoined] = itemsHash
 	ws.AddTrainer(lobby.wsLobby, username, trainerConn)
 }
 
@@ -82,8 +87,7 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 		}
 
 		if lobby.status.TradeFinished {
-			log.Info("finishing...")
-			return lobby.finish()
+			return nil
 		}
 	}
 }
@@ -103,14 +107,16 @@ func (lobby *TradeLobby) finish() error {
 		MsgType: trades.FINISH,
 		MsgArgs: nil,
 	}
-
 	updateClients(finishMessage, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
+
+	time.Sleep(2 * time.Second)
 
 	return nil
 }
 
 func (lobby *TradeLobby) sendTokenToUser(trainerNum int) error {
 	err := trainersClient.GetItemsToken(lobby.expected[trainerNum], lobby.authTokens[trainerNum])
+	log.Info("got ", trainersClient.ItemsClaims.ItemsHash)
 	if err != nil {
 		return err
 	}

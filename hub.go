@@ -90,6 +90,7 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		expected:       [2]string{authClaims.Username, request.Username},
 		wsLobby:        ws.NewLobby(lobbyId),
 		availableItems: [2]trades.ItemsMap{},
+		initialHashes:  [2][]byte{},
 		started:        make(chan struct{}),
 	}
 
@@ -160,7 +161,7 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lobby.AddTrainer(claims.Username, itemsClaims.Items, r.Header.Get(tokens.AuthTokenHeaderName), conn)
+	lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash, r.Header.Get(tokens.AuthTokenHeaderName), conn)
 
 	if lobby.wsLobby.TrainersJoined == 2 {
 		err = lobby.StartTrade()
@@ -169,14 +170,35 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		} else if lobby.status.TradeFinished {
 			log.Info("Finished trade")
 			commitChanges(lobby.wsLobby, lobby.status)
+			err := checkChanges(lobby, lobby.status)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+
+			if err := lobby.finish(); err != nil {
+				log.Error(err)
+				return
+			}
 		} else {
 			log.Error("Something went wrong...")
 		}
+
+		log.Info("closing lobby as expected")
 		ws.CloseLobby(lobby.wsLobby)
 	} else {
 		timer := time.NewTimer(10 * time.Second)
 		select {
 		case <-timer.C:
+			log.Error("closing lobby since time expired")
+			finishMessage := &ws.Message{
+				MsgType: trades.FINISH,
+				MsgArgs: nil,
+			}
+			updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0])
+
+			time.Sleep(2 * time.Second)
+
 			ws.CloseLobby(lobby.wsLobby)
 			return
 		case <-lobby.started:
@@ -222,6 +244,33 @@ func commitChanges(lobby *ws.Lobby, trade *trades.TradeStatus) {
 	if len(items2) > 0 {
 		tradeItems(trainer2Username, trainer1Username, items2)
 	}
+
+	log.Warn("Changes committed")
+}
+
+func checkChanges(lobby *TradeLobby, trade *trades.TradeStatus) error {
+	verified := 0
+
+	for verified < 2 {
+		if len(trade.Players[verified].Items) == 0 {
+			verified++
+			continue
+		} else {
+			correct, err := trainersClient.VerifyItems(lobby.expected[verified],
+				lobby.initialHashes[verified], lobby.authTokens[verified])
+			if err != nil {
+				return err
+			}
+
+			if !*correct{
+				verified++
+			}
+		}
+	}
+
+	log.Info("users had their items changed")
+
+	return nil
 }
 
 func tradeItems(fromUsername, toUsername string, items []*utils.Item) {

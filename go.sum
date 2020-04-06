@@ -1,5 +1,8 @@
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/NOVAPokemon/client v0.0.0-20200404150137-d54843f70731 h1:by/BJG8B0DLY+zFifcNHZ5B75V55opZRbm3GTA+J7Ns=
+github.com/NOVAPokemon/client v0.0.0-20200404150137-d54843f70731/go.mod h1:K+y9e8AiSA/SPO+/c35PhLlRjNmZ308UjcpNkAEfVQ8=
 github.com/NOVAPokemon/trainers v0.0.3/go.mod h1:FCwzRHT0j/u3H/VLPP4gPQaQRund8eYoD6hJannP0yo=
+github.com/NOVAPokemon/utils v0.0.62/go.mod h1:iuir+p5jZ0Ur/9kYvmPdp7dyh9uohLcIkGuAv91qtRw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

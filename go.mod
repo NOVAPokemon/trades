@@ -3,6 +3,7 @@ module github.com/NOVAPokemon/trades
 go 1.13
 
 require (
+	github.com/NOVAPokemon/client v0.0.0-20200404150137-d54843f70731 // indirect
 	github.com/NOVAPokemon/utils v0.0.64
 	github.com/gorilla/mux v1.7.4
 	github.com/gorilla/websocket v1.4.2
