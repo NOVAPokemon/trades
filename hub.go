@@ -6,7 +6,6 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
-	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
 	"github.com/NOVAPokemon/utils/notifications"
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
@@ -16,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
+	"reflect"
 	"time"
 )
 
@@ -169,8 +169,8 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 			log.Error(err)
 		} else if lobby.status.TradeFinished {
 			log.Info("Finished trade")
-			commitChanges(lobby.wsLobby, lobby.status)
-			err := checkChanges(lobby, lobby.status)
+			commitChanges(lobby)
+			err := checkChanges(lobby)
 			if err != nil {
 				log.Error(err)
 				return
@@ -231,24 +231,27 @@ func cleanLobby(lobby *ws.Lobby) {
 	}
 }
 
-func commitChanges(lobby *ws.Lobby, trade *trades.TradeStatus) {
-	trainer1Username := lobby.TrainerUsernames[0]
-	trainer2Username := lobby.TrainerUsernames[1]
+func commitChanges(lobby *TradeLobby) {
+	trade := lobby.status
+
+	trainer1Username := lobby.expected[0]
+	trainer2Username := lobby.expected[1]
 
 	items1 := trade.Players[0].Items
 	items2 := trade.Players[1].Items
 
 	if len(items1) > 0 {
-		tradeItems(trainer1Username, trainer2Username, items1)
+		tradeItems(trainer1Username, trainer2Username, lobby.authTokens[0], lobby.authTokens[1], items1)
 	}
 	if len(items2) > 0 {
-		tradeItems(trainer2Username, trainer1Username, items2)
+		tradeItems(trainer2Username, trainer1Username, lobby.authTokens[1], lobby.authTokens[0], items2)
 	}
 
 	log.Warn("Changes committed")
 }
 
-func checkChanges(lobby *TradeLobby, trade *trades.TradeStatus) error {
+func checkChanges(lobby *TradeLobby) error {
+	trade := lobby.status
 	verified := 0
 
 	for verified < 2 {
@@ -262,7 +265,7 @@ func checkChanges(lobby *TradeLobby, trade *trades.TradeStatus) error {
 				return err
 			}
 
-			if !*correct{
+			if !*correct {
 				verified++
 			}
 		}
@@ -273,21 +276,27 @@ func checkChanges(lobby *TradeLobby, trade *trades.TradeStatus) error {
 	return nil
 }
 
-func tradeItems(fromUsername, toUsername string, items []*utils.Item) {
-	itemIds := make([]primitive.ObjectID, len(items))
+func tradeItems(fromUsername, toUsername, fromAuthToken, toAuthToken string, items []*utils.Item) {
+	itemIds := make([]string, len(items))
 	for i, item := range items {
-		itemIds[i] = item.Id
+		itemIds[i] = item.Id.Hex()
 	}
 
-	_, err := trainerdb.RemoveItemsFromTrainer(fromUsername, itemIds)
+	err := trainersClient.RemoveItemsFromBag(fromUsername, itemIds, fromAuthToken)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	_, err = trainerdb.AddItemsToTrainer(toUsername, items)
+	result, err := trainersClient.AddItemsToBag(toUsername, items, toAuthToken)
 	if err != nil {
 		log.Error(err)
+	}
+
+	if !checkItemsAdded(items, result) {
+		log.Error("items to add were not successfully added")
+	} else {
+		log.Info("items were successfully added")
 	}
 }
 
@@ -301,6 +310,14 @@ func checkItemsToken(username string, itemsHash []byte, authToken string) bool {
 	log.Warn("hashes are equal: ", *verify)
 
 	return *verify
+}
+
+func checkItemsAdded(toAdd, added []*utils.Item) bool {
+	for i, item := range toAdd {
+		item.Id = added[i].Id
+	}
+
+	return reflect.DeepEqual(toAdd, added)
 }
 
 func postNotification(sender, receiver, lobbyId string, authToken string) error {
