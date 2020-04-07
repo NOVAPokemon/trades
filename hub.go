@@ -15,7 +15,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
-	"reflect"
 	"time"
 )
 
@@ -109,7 +108,7 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	hub.Trades[lobbyId.Hex()] = &lobby
 	log.Info("created lobby ", lobbyId)
 
-	go cleanLobby(lobby.wsLobby)
+	go cleanLobby(lobbyId.Hex(), lobby.wsLobby.EndConnectionChannels[lobby.wsLobby.TrainersJoined])
 }
 
 func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
@@ -221,11 +220,11 @@ func handleError(w *http.ResponseWriter, errorString string, err error) {
 	return
 }
 
-func cleanLobby(lobby *ws.Lobby) {
+func cleanLobby(lobbyId string, endConnection chan struct{}) {
 	for {
 		select {
-		case <-lobby.EndConnectionChannel:
-			delete(hub.Trades, lobby.Id.Hex())
+		case <-endConnection:
+			delete(hub.Trades, lobbyId)
 			return
 		}
 	}
@@ -293,8 +292,8 @@ func tradeItems(fromUsername, toUsername, fromAuthToken, toAuthToken string, ite
 		log.Error(err)
 	}
 
-	if !checkItemsAdded(items, result) {
-		log.Error("items to add were not successfully added")
+	if err := clients.CheckItemsAdded(items, result); err != nil {
+		log.Error(err)
 	} else {
 		log.Info("items were successfully added")
 	}
@@ -310,14 +309,6 @@ func checkItemsToken(username string, itemsHash []byte, authToken string) bool {
 	log.Warn("hashes are equal: ", *verify)
 
 	return *verify
-}
-
-func checkItemsAdded(toAdd, added []*utils.Item) bool {
-	for i, item := range toAdd {
-		item.Id = added[i].Id
-	}
-
-	return reflect.DeepEqual(toAdd, added)
 }
 
 func postNotification(sender, receiver, lobbyId string, authToken string) error {

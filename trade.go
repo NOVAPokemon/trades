@@ -8,7 +8,6 @@ import (
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 type TradeLobby struct {
@@ -69,8 +68,10 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 			}
 			trainerNum = 1
 			msgStr = str
-		case <-wsLobby.EndConnectionChannel:
-			return errors.New("error during trade")
+		case <-wsLobby.EndConnectionChannels[0]:
+			return errors.New("error during trade on user 0")
+		case <-wsLobby.EndConnectionChannels[1]:
+			return errors.New("error during trade on user 1")
 		}
 
 		tradeMessage = handleChannelMessage(msgStr, &lobby.availableItems, lobby.status, trainerNum)
@@ -109,7 +110,8 @@ func (lobby *TradeLobby) finish() error {
 	}
 	updateClients(finishMessage, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
 
-	time.Sleep(2 * time.Second)
+	<-lobby.wsLobby.EndConnectionChannels[0]
+	<-lobby.wsLobby.EndConnectionChannels[1]
 
 	return nil
 }
