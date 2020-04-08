@@ -15,41 +15,44 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
+	"sync"
 	"time"
 )
 
 const TradeName = "TRADES"
 
-type Hub struct {
-	Trades map[string]*TradeLobby
-}
+type keyType = string
+type valueType = *TradeLobby
+
+var Trades = sync.Map{}
 
 var trainersClient = clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort))
 var notificationsClient = clients.NewNotificationClient(fmt.Sprintf("%s:%d", utils.Host, utils.NotificationsPort), nil)
 
-func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	var availableLobbies = make([]utils.Lobby, 0)
-
+func HandleGetCurrentLobbies(w http.ResponseWriter, r *http.Request) {
 	_, err := tokens.ExtractAndVerifyAuthToken(r.Header)
-
 	if err != nil {
 		log.Error("Unauthenticated clients")
 		return
 	}
 
-	for id, lobby := range hub.Trades {
-		if !lobby.wsLobby.Started {
-			lobbyId, err := primitive.ObjectIDFromHex(id)
+	var availableLobbies []utils.Lobby
+	Trades.Range(func(key, value interface{}) bool {
+		wsLobby := value.(valueType).wsLobby
+		if !wsLobby.Started {
+			lobbyId, err := primitive.ObjectIDFromHex(key.(keyType))
 			if err != nil {
-				return
+				return false
 			}
 
 			availableLobbies = append(availableLobbies, utils.Lobby{
 				Id:       lobbyId,
-				Username: lobby.wsLobby.TrainerUsernames[0],
+				Username: wsLobby.TrainerUsernames[0],
 			})
 		}
-	}
+
+		return true
+	})
 
 	log.Infof("Request for trade lobbies, response %+v", availableLobbies)
 	js, err := json.Marshal(availableLobbies)
@@ -65,7 +68,7 @@ func HandleGetCurrentLobbies(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
+func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	var request api.CreateLobbyRequest
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
@@ -105,13 +108,13 @@ func HandleCreateTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		handleError(&w, "Error writing json to body", err)
 	}
 
-	hub.Trades[lobbyId.Hex()] = &lobby
+	Trades.Store(lobbyId.Hex(), &lobby)
 	log.Info("created lobby ", lobbyId)
 
 	go cleanLobby(lobbyId.Hex(), lobby.wsLobby.EndConnectionChannels[lobby.wsLobby.TrainersJoined])
 }
 
-func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
+func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
@@ -138,12 +141,13 @@ func HandleJoinTradeLobby(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lobby := hub.Trades[lobbyId.Hex()]
-
+	lobbyInterface, ok := Trades.Load(lobbyId.Hex())
 	if !ok {
 		closeConnAndHandleError(conn, &w, "Trade missing", err)
 		return
 	}
+
+	lobby := lobbyInterface.(valueType)
 
 	if lobby.expected[0] != claims.Username && lobby.expected[1] != claims.Username {
 		closeConnAndHandleError(conn, &w, "player not expected in lobby", nil)
@@ -224,7 +228,7 @@ func cleanLobby(lobbyId string, endConnection chan struct{}) {
 	for {
 		select {
 		case <-endConnection:
-			delete(hub.Trades, lobbyId)
+			Trades.Delete(lobbyId)
 			return
 		}
 	}
