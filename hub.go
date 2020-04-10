@@ -6,6 +6,7 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
+	tradeMessages "github.com/NOVAPokemon/utils/messages/trades"
 	"github.com/NOVAPokemon/utils/notifications"
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
@@ -194,11 +195,12 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-timer.C:
 			log.Error("closing lobby since time expired")
-			finishMessage := &ws.Message{
-				MsgType: trades.FINISH,
-				MsgArgs: nil,
+
+			if !lobby.wsLobby.Finished {
+				return
 			}
-			updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0])
+
+			updateClients(tradeMessages.FinishMessage{}.Serialize(), lobby.wsLobby.TrainerOutChannels[0])
 
 			time.Sleep(2 * time.Second)
 
