@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/NOVAPokemon/utils"
+	"github.com/NOVAPokemon/utils/items"
 	tradeMessages "github.com/NOVAPokemon/utils/messages/trades"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
@@ -21,7 +21,7 @@ type TradeLobby struct {
 	started        chan struct{}
 }
 
-func (lobby *TradeLobby) AddTrainer(username string, items map[string]utils.Item, itemsHash []byte,
+func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item, itemsHash []byte,
 	authToken string, trainerConn *websocket.Conn) {
 	numJoined := lobby.wsLobby.TrainersJoined
 	lobby.availableItems[numJoined] = items
@@ -32,8 +32,8 @@ func (lobby *TradeLobby) AddTrainer(username string, items map[string]utils.Item
 
 func (lobby *TradeLobby) StartTrade() error {
 	players := [2]trades.Player{
-		{Items: []*utils.Item{}, Accepted: false},
-		{Items: []*utils.Item{}, Accepted: false},
+		{Items: []*items.Item{}, Accepted: false},
+		{Items: []*items.Item{}, Accepted: false},
 	}
 
 	lobby.status = &trades.TradeStatus{

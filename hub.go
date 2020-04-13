@@ -6,6 +6,7 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
+	"github.com/NOVAPokemon/utils/items"
 	tradeMessages "github.com/NOVAPokemon/utils/messages/trades"
 	"github.com/NOVAPokemon/utils/notifications"
 	"github.com/NOVAPokemon/utils/tokens"
@@ -281,7 +282,7 @@ func checkChanges(lobby *TradeLobby) error {
 	return nil
 }
 
-func tradeItems(fromUsername, toUsername, fromAuthToken, toAuthToken string, items []*utils.Item) {
+func tradeItems(fromUsername, toUsername, fromAuthToken, toAuthToken string, items []*items.Item) {
 	itemIds := make([]string, len(items))
 	for i, item := range items {
 		itemIds[i] = item.Id.Hex()
