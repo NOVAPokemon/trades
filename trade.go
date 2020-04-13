@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/NOVAPokemon/utils/items"
+	"github.com/NOVAPokemon/utils/clients"
 	tradeMessages "github.com/NOVAPokemon/utils/messages/trades"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
@@ -32,8 +33,8 @@ func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item
 
 func (lobby *TradeLobby) StartTrade() error {
 	players := [2]trades.Player{
-		{Items: []*items.Item{}, Accepted: false},
-		{Items: []*items.Item{}, Accepted: false},
+		{Items: []items.Item{}, Accepted: false},
+		{Items: []items.Item{}, Accepted: false},
 	}
 
 	lobby.status = &trades.TradeStatus{
@@ -92,20 +93,11 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 	}
 }
 
-func (lobby *TradeLobby) finish() error {
-	wsLobby := lobby.wsLobby
-
-	if err := lobby.sendTokenToUser(0); err != nil {
-		return err
-	}
-
-	if err := lobby.sendTokenToUser(1); err != nil {
-		return err
-	}
+func (lobby *TradeLobby) finish(trainersClient *clients.TrainersClient) error {
 
 	finishMessage := tradeMessages.FinishMessage{Success: true}.Serialize()
 
-	updateClients(finishMessage, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
+	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
 
 	<-lobby.wsLobby.EndConnectionChannels[0]
 	<-lobby.wsLobby.EndConnectionChannels[1]
@@ -113,12 +105,7 @@ func (lobby *TradeLobby) finish() error {
 	return nil
 }
 
-func (lobby *TradeLobby) sendTokenToUser(trainerNum int) error {
-	err := trainersClient.GetItemsToken(lobby.expected[trainerNum], lobby.authTokens[trainerNum])
-	log.Info("got ", trainersClient.ItemsClaims.ItemsHash)
-	if err != nil {
-		return err
-	}
+func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient, trainerNum int) error {
 
 	updateClients(
 		tradeMessages.SetTokenMessage{TokenString: trainersClient.ItemsToken}.Serialize(),
@@ -178,7 +165,7 @@ func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 		}
 	}
 
-	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, &item)
+	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, item)
 	return tradeMessages.UpdateMessageFromTrade(trade).Serialize()
 }
 
