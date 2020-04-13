@@ -26,8 +26,8 @@ type keyType = string
 type valueType = *TradeLobby
 
 var Trades = sync.Map{}
+var httpClient = &http.Client{}
 
-var trainersClient = clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort))
 var notificationsClient = clients.NewNotificationClient(fmt.Sprintf("%s:%d", utils.Host, utils.NotificationsPort), nil)
 
 func HandleGetCurrentLobbies(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +160,9 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !checkItemsToken(claims.Username, itemsClaims.ItemsHash, r.Header.Get(tokens.AuthTokenHeaderName)) {
+	trainersClient := clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), httpClient)
+
+	if !checkItemsToken(*trainersClient, claims.Username, itemsClaims.ItemsHash, r.Header.Get(tokens.AuthTokenHeaderName)) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -173,14 +175,14 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			log.Error(err)
 		} else if lobby.status.TradeFinished {
 			log.Info("Finished trade")
-			commitChanges(lobby)
-			err := checkChanges(lobby)
+			commitChanges(trainersClient, lobby)
+			err := checkChanges(trainersClient, lobby)
 			if err != nil {
 				log.Error(err)
 				return
 			}
 
-			if err := lobby.finish(); err != nil {
+			if err := lobby.finish(trainersClient); err != nil {
 				log.Error(err)
 				return
 			}
@@ -236,7 +238,7 @@ func cleanLobby(lobbyId string, endConnection chan struct{}) {
 	}
 }
 
-func commitChanges(lobby *TradeLobby) {
+func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) {
 	trade := lobby.status
 
 	trainer1Username := lobby.expected[0]
@@ -246,16 +248,23 @@ func commitChanges(lobby *TradeLobby) {
 	items2 := trade.Players[1].Items
 
 	if len(items1) > 0 {
-		tradeItems(trainer1Username, trainer2Username, lobby.authTokens[0], lobby.authTokens[1], items1)
+		tradeItems(trainersClient, trainer1Username, trainer2Username, lobby.authTokens[0], lobby.authTokens[1], items1)
 	}
+
 	if len(items2) > 0 {
-		tradeItems(trainer2Username, trainer1Username, lobby.authTokens[1], lobby.authTokens[0], items2)
+		tradeItems(trainersClient, trainer2Username, trainer1Username, lobby.authTokens[1], lobby.authTokens[0], items2)
 	}
+
+	_ = trainersClient.GetItemsToken(trainer1Username, lobby.authTokens[0])
+	_ = lobby.sendTokenToUser(trainersClient, 0)
+
+	_ = trainersClient.GetItemsToken(trainer2Username, lobby.authTokens[1])
+	_ = lobby.sendTokenToUser(trainersClient, 1)
 
 	log.Warn("Changes committed")
 }
 
-func checkChanges(lobby *TradeLobby) error {
+func checkChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) error {
 	trade := lobby.status
 	verified := 0
 
@@ -281,31 +290,36 @@ func checkChanges(lobby *TradeLobby) error {
 	return nil
 }
 
-func tradeItems(fromUsername, toUsername, fromAuthToken, toAuthToken string, items []*utils.Item) {
+func tradeItems(trainersClient *clients.TrainersClient, fromUsername, toUsername, fromAuthToken, toAuthToken string, items []utils.Item) {
+
 	itemIds := make([]string, len(items))
 	for i, item := range items {
 		itemIds[i] = item.Id.Hex()
 	}
 
-	err := trainersClient.RemoveItemsFromBag(fromUsername, itemIds, fromAuthToken)
+	_, err := trainersClient.RemoveItemsFromBag(fromUsername, itemIds, fromAuthToken)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	result, err := trainersClient.AddItemsToBag(toUsername, items, toAuthToken)
+	_, err = trainersClient.AddItemsToBag(toUsername, items, toAuthToken)
 	if err != nil {
-		log.Error(err)
-	}
-
-	if err := clients.CheckItemsAdded(items, result); err != nil {
 		log.Error(err)
 	} else {
 		log.Info("items were successfully added")
 	}
+
+	/*
+		if err := clients.CheckItemsAdded(items, result); err != nil {
+			log.Error(err)
+		} else {
+			log.Info("items were successfully added")
+		}
+	*/
 }
 
-func checkItemsToken(username string, itemsHash []byte, authToken string) bool {
+func checkItemsToken(trainersClient clients.TrainersClient, username string, itemsHash []byte, authToken string) bool {
 	verify, err := trainersClient.VerifyItems(username, itemsHash, authToken)
 	if err != nil {
 		log.Error(err)
