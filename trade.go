@@ -3,8 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/NOVAPokemon/utils/items"
 	"github.com/NOVAPokemon/utils/clients"
+	"github.com/NOVAPokemon/utils/items"
 	tradeMessages "github.com/NOVAPokemon/utils/messages/trades"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
@@ -93,25 +93,19 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 	}
 }
 
-func (lobby *TradeLobby) finish(trainersClient *clients.TrainersClient) error {
-
+func (lobby *TradeLobby) finish() {
 	finishMessage := tradeMessages.FinishMessage{Success: true}.Serialize()
 
 	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
 
 	<-lobby.wsLobby.EndConnectionChannels[0]
 	<-lobby.wsLobby.EndConnectionChannels[1]
-
-	return nil
 }
 
-func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient, trainerNum int) error {
-
+func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient, trainerNum int) {
 	updateClients(
 		tradeMessages.SetTokenMessage{TokenString: trainersClient.ItemsToken}.Serialize(),
 		lobby.wsLobby.TrainerOutChannels[trainerNum])
-
-	return nil
 }
 
 func handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,

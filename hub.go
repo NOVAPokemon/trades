@@ -183,10 +183,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			if err := lobby.finish(trainersClient); err != nil {
-				log.Error(err)
-				return
-			}
+			lobby.finish()
 		} else {
 			log.Error("Something went wrong...")
 		}
@@ -248,19 +245,11 @@ func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) {
 	items1 := trade.Players[0].Items
 	items2 := trade.Players[1].Items
 
-	if len(items1) > 0 {
-		tradeItems(trainersClient, trainer1Username, trainer2Username, lobby.authTokens[0], lobby.authTokens[1], items1)
-	}
+	tradeItems(trainersClient, trainer1Username, lobby.authTokens[0], items1, items2)
+	lobby.sendTokenToUser(trainersClient, 0)
 
-	if len(items2) > 0 {
-		tradeItems(trainersClient, trainer2Username, trainer1Username, lobby.authTokens[1], lobby.authTokens[0], items2)
-	}
-
-	_ = trainersClient.GetItemsToken(trainer1Username, lobby.authTokens[0])
-	_ = lobby.sendTokenToUser(trainersClient, 0)
-
-	_ = trainersClient.GetItemsToken(trainer2Username, lobby.authTokens[1])
-	_ = lobby.sendTokenToUser(trainersClient, 1)
+	tradeItems(trainersClient, trainer2Username, lobby.authTokens[1], items2, items1)
+	lobby.sendTokenToUser(trainersClient, 1)
 
 	log.Warn("Changes committed")
 }
@@ -291,23 +280,27 @@ func checkChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) err
 	return nil
 }
 
-func tradeItems(trainersClient *clients.TrainersClient, fromUsername, toUsername, fromAuthToken, toAuthToken string, items []items.Item) {
-	itemIds := make([]string, len(items))
-	for i, item := range items {
-		itemIds[i] = item.Id.Hex()
+func tradeItems(trainersClient *clients.TrainersClient, username, authToken string, toRemove, toAdd []items.Item) {
+	toRemoveIds := make([]string, len(toRemove))
+	for i, item := range toRemove {
+		toRemoveIds[i] = item.Id.Hex()
 	}
 
-	_, err := trainersClient.RemoveItemsFromBag(fromUsername, itemIds, fromAuthToken)
-	if err != nil {
-		log.Error(err)
-		return
+	if len(toRemove) > 0 {
+		_, err := trainersClient.RemoveItemsFromBag(username, toRemoveIds, authToken)
+		if err != nil {
+			log.Error(err)
+			return
+		}
 	}
 
-	_, err = trainersClient.AddItemsToBag(toUsername, items, toAuthToken)
-	if err != nil {
-		log.Error(err)
-	} else {
-		log.Info("items were successfully added")
+	if len(toAdd) > 0 {
+		_, err := trainersClient.AddItemsToBag(username, toAdd, authToken)
+		if err != nil {
+			log.Error(err)
+		} else {
+			log.Info("items were successfully added")
+		}
 	}
 
 	/*
