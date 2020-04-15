@@ -26,7 +26,8 @@ const TradeName = "TRADES"
 type keyType = string
 type valueType = *TradeLobby
 
-var Trades = sync.Map{}
+var WaitingTrades = sync.Map{}
+var OngoingTrades = sync.Map{}
 var httpClient = &http.Client{}
 
 var notificationsClient = clients.NewNotificationClient(fmt.Sprintf("%s:%d", utils.Host, utils.NotificationsPort), nil)
@@ -39,7 +40,7 @@ func HandleGetCurrentLobbies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var availableLobbies []utils.Lobby
-	Trades.Range(func(key, value interface{}) bool {
+	WaitingTrades.Range(func(key, value interface{}) bool {
 		wsLobby := value.(valueType).wsLobby
 		if !wsLobby.Started {
 			lobbyId, err := primitive.ObjectIDFromHex(key.(keyType))
@@ -110,7 +111,7 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 		handleError(&w, "Error writing json to body", err)
 	}
 
-	Trades.Store(lobbyId.Hex(), &lobby)
+	WaitingTrades.Store(lobbyId.Hex(), &lobby)
 	log.Info("created lobby ", lobbyId)
 
 	go cleanLobby(lobbyId.Hex(), lobby.wsLobby.EndConnectionChannels[lobby.wsLobby.TrainersJoined])
@@ -143,7 +144,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lobbyInterface, ok := Trades.Load(lobbyId.Hex())
+	lobbyInterface, ok := WaitingTrades.Load(lobbyId.Hex())
 	if !ok {
 		closeConnAndHandleError(conn, &w, "Trade missing", err)
 		return
@@ -171,6 +172,8 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash, r.Header.Get(tokens.AuthTokenHeaderName), conn)
 
 	if lobby.wsLobby.TrainersJoined == 2 {
+		WaitingTrades.Delete(lobbyId)
+		OngoingTrades.Store(lobbyId.Hex(), lobby)
 		err = lobby.StartTrade()
 		if err != nil {
 			log.Error(err)
@@ -230,7 +233,8 @@ func cleanLobby(lobbyId string, endConnection chan struct{}) {
 	for {
 		select {
 		case <-endConnection:
-			Trades.Delete(lobbyId)
+			WaitingTrades.Delete(lobbyId)
+			OngoingTrades.Delete(lobbyId)
 			return
 		}
 	}
