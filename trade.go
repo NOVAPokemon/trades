@@ -81,9 +81,9 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 		}
 
 		switch tradeMessage.MsgType {
-		case trades.ERROR:
+		case tradeMessages.ERROR:
 			updateClients(tradeMessage, wsLobby.TrainerOutChannels[trainerNum])
-		case trades.UPDATE:
+		case tradeMessages.UPDATE:
 			updateClients(tradeMessage, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
 		}
 
@@ -123,9 +123,9 @@ func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	status *trades.TradeStatus, trainerNum int) *ws.Message {
 
 	switch message.MsgType {
-	case trades.TRADE:
+	case tradeMessages.TRADE:
 		return handleTradeMessage(message, availableItems, status, trainerNum)
-	case trades.ACCEPT:
+	case tradeMessages.ACCEPT:
 		return handleAcceptMessage(status, trainerNum)
 	default:
 		return tradeMessages.ErrorMessage{
