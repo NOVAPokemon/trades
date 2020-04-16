@@ -47,7 +47,7 @@ func (lobby *TradeLobby) StartTrade() error {
 func (lobby *TradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
 
-	updateClients(tradeMessages.StartMessage{}.Serialize(), wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
+	updateClients(tradeMessages.StartMessage{}.SerializeToWSMessage(), wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
 	close(lobby.started)
 	wsLobby.Started = true
 
@@ -94,7 +94,7 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 }
 
 func (lobby *TradeLobby) finish() {
-	finishMessage := tradeMessages.FinishMessage{Success: true}.Serialize()
+	finishMessage := tradeMessages.FinishMessage{Success: true}.SerializeToWSMessage()
 
 	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
 
@@ -104,7 +104,7 @@ func (lobby *TradeLobby) finish() {
 
 func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient, trainerNum int) {
 	updateClients(
-		tradeMessages.SetTokenMessage{TokenString: trainersClient.ItemsToken}.Serialize(),
+		tradeMessages.SetTokenMessage{TokenString: trainersClient.ItemsToken}.SerializeToWSMessage(),
 		lobby.wsLobby.TrainerOutChannels[trainerNum])
 }
 
@@ -131,7 +131,7 @@ func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 		return tradeMessages.ErrorMessage{
 			Info:  fmt.Sprintf("invalid msg type %s", message.MsgType),
 			Fatal: false,
-		}.Serialize()
+		}.SerializeToWSMessage()
 	}
 }
 
@@ -147,20 +147,20 @@ func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 		return tradeMessages.ErrorMessage{
 			Info:  fmt.Sprintf("you dont have %s", itemId),
 			Fatal: false,
-		}.Serialize()
+		}.SerializeToWSMessage()
 	} else {
 		for _, itemAdded := range trade.Players[trainerNum].Items {
 			if itemAdded.Id.Hex() == itemId {
 				return tradeMessages.ErrorMessage{
 					Info:  fmt.Sprintf("you already added %s", itemId),
 					Fatal: false,
-				}.Serialize()
+				}.SerializeToWSMessage()
 			}
 		}
 	}
 
 	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, item)
-	return tradeMessages.UpdateMessageFromTrade(trade).Serialize()
+	return tradeMessages.UpdateMessageFromTrade(trade).SerializeToWSMessage()
 }
 
 func handleAcceptMessage(trade *trades.TradeStatus, trainerNum int) *ws.Message {
@@ -170,7 +170,7 @@ func handleAcceptMessage(trade *trades.TradeStatus, trainerNum int) *ws.Message 
 		trade.TradeFinished = true
 	}
 
-	return tradeMessages.UpdateMessageFromTrade(trade).Serialize()
+	return tradeMessages.UpdateMessageFromTrade(trade).SerializeToWSMessage()
 }
 
 func updateClients(msg *ws.Message, sendTo ...*chan *string) {
