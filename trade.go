@@ -137,12 +137,12 @@ func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 
 func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	trade *trades.TradeStatus, trainerNum int) *ws.Message {
-	if len(message.MsgArgs) > 1 {
-		return tradeMessages.ErrorOneItemAtATime
-	}
 
-	itemId := message.MsgArgs[0]
+	tradeMsg := tradeMessages.Deserialize(message).(*tradeMessages.TradeMessage)
+
+	itemId := tradeMsg.ItemId
 	item, ok := (*availableItems)[trainerNum][itemId]
+
 	if !ok {
 		return tradeMessages.ErrorMessage{
 			Info:  fmt.Sprintf("you dont have %s", itemId),
