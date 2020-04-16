@@ -218,7 +218,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 func closeConnAndHandleError(conn *websocket.Conn, w *http.ResponseWriter, errorString string, err error) {
 	log.Error("closing connection")
-	conn.Close()
+	ws.CloseConnection(conn)
 	handleError(w, errorString, err)
 }
 
