@@ -80,9 +80,9 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 		}
 
 		switch tradeMessage.MsgType {
-		case trades.ERROR:
+		case trades.Error:
 			updateClients(tradeMessage, wsLobby.TrainerOutChannels[trainerNum])
-		case trades.UPDATE:
+		case trades.Update:
 			updateClients(tradeMessage, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
 		}
 
@@ -122,10 +122,10 @@ func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	status *trades.TradeStatus, trainerNum int) *ws.Message {
 
 	switch message.MsgType {
-	case trades.TRADE:
+	case trades.Trade:
 		return handleTradeMessage(message, availableItems, status, trainerNum)
-	case trades.ACCEPT:
-		return handleAcceptMessage(status, trainerNum)
+	case trades.Accept:
+		return handleAcceptMessage(message, status, trainerNum)
 	default:
 		return trades.ErrorMessage{
 			Info:  fmt.Sprintf("invalid msg type %s", message.MsgType),
@@ -159,17 +159,21 @@ func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	}
 
 	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, item)
-	return trades.UpdateMessageFromTrade(trade).SerializeToWSMessage()
+	return trades.UpdateMessageFromTrade(trade, tradeMsg.TrackedMessage).SerializeToWSMessage()
 }
 
-func handleAcceptMessage(trade *trades.TradeStatus, trainerNum int) *ws.Message {
+func handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus, trainerNum int) *ws.Message {
+	acceptMsg := trades.Deserialize(message).(*trades.AcceptMessage)
 	trade.Players[trainerNum].Accepted = true
+
+	acceptMsg.Receive(ws.MakeTimestamp())
+	acceptMsg.LogReceive(trades.Accept)
 
 	if checkIfBattleFinished(trade) {
 		trade.TradeFinished = true
 	}
 
-	return trades.UpdateMessageFromTrade(trade).SerializeToWSMessage()
+	return trades.UpdateMessageFromTrade(trade, acceptMsg.TrackedMessage).SerializeToWSMessage()
 }
 
 func updateClients(msg *ws.Message, sendTo ...*chan *string) {
