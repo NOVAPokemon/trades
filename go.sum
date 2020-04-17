@@ -1,10 +1,4 @@
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/NOVAPokemon/client v0.0.0-20200404150137-d54843f70731 h1:by/BJG8B0DLY+zFifcNHZ5B75V55opZRbm3GTA+J7Ns=
-github.com/NOVAPokemon/client v0.0.0-20200404150137-d54843f70731/go.mod h1:K+y9e8AiSA/SPO+/c35PhLlRjNmZ308UjcpNkAEfVQ8=
-github.com/NOVAPokemon/store v0.0.0-20200402234902-75f7792046b7 h1:SRESWGQGVCAxZnTwvB9C0eVGU/H6g8Gsj0qxTJ0TFs0=
-github.com/NOVAPokemon/store v0.0.0-20200402234902-75f7792046b7/go.mod h1:nXXKMHl3WKGeBex3+Gn27aqH3kjROuk5cMb6vx59J/M=
-github.com/NOVAPokemon/trainers v0.0.3/go.mod h1:FCwzRHT0j/u3H/VLPP4gPQaQRund8eYoD6hJannP0yo=
-github.com/NOVAPokemon/utils v0.0.62/go.mod h1:iuir+p5jZ0Ur/9kYvmPdp7dyh9uohLcIkGuAv91qtRw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -124,4 +118,3 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/errgo.v2 v2.1.0/go.mod h1:hNsd1EY+bozCKY1Ytp96fpM3vjJbqLJn88ws8XvfDNI=
 gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
-robpike.io/filter v0.0.0-20150108201509-2984852a2183/go.mod h1:JQLSCVDQbISDYGuIQqGa40P6NsyycM3cVAiOKl0tjfI=

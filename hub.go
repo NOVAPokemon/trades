@@ -10,7 +10,6 @@ import (
 	"github.com/NOVAPokemon/utils/notifications"
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
-	tradeMessages "github.com/NOVAPokemon/utils/websockets/messages/trades"
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -203,7 +202,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			updateClients(tradeMessages.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
+			updateClients(trades.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
 
 			time.Sleep(2 * time.Second)
 
