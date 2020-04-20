@@ -137,7 +137,7 @@ func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	trade *trades.TradeStatus, trainerNum int) *ws.Message {
 
-	tradeMsg := trades.Deserialize(message).(*trades.TradeMessage)
+	tradeMsg := trades.DeserializeTradeMessage(message).(*trades.TradeMessage)
 
 	itemId := tradeMsg.ItemId
 	item, ok := (*availableItems)[trainerNum][itemId]
@@ -163,7 +163,7 @@ func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 }
 
 func handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus, trainerNum int) *ws.Message {
-	acceptMsg := trades.Deserialize(message).(*trades.AcceptMessage)
+	acceptMsg := trades.DeserializeTradeMessage(message).(*trades.AcceptMessage)
 	trade.Players[trainerNum].Accepted = true
 
 	acceptMsg.Receive(ws.MakeTimestamp())
