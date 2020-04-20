@@ -163,12 +163,14 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	trainersClient := clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), httpClient)
 
-	if !checkItemsToken(*trainersClient, claims.Username, itemsClaims.ItemsHash, r.Header.Get(tokens.AuthTokenHeaderName)) {
+	if !checkItemsToken(*trainersClient, claims.Username, itemsClaims.ItemsHash,
+		r.Header.Get(tokens.AuthTokenHeaderName)) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash, r.Header.Get(tokens.AuthTokenHeaderName), conn)
+	lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
+		r.Header.Get(tokens.AuthTokenHeaderName), conn)
 
 	if lobby.wsLobby.TrainersJoined == 2 {
 		WaitingTrades.Delete(lobbyId)
@@ -212,7 +214,6 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
 }
 
 func closeConnAndHandleError(conn *websocket.Conn, w *http.ResponseWriter, errorString string, err error) {
@@ -306,6 +307,12 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 		}
 	}
 
+	if len(toRemove) == 0 && len(toAdd) == 0 {
+		if err := trainersClient.GetItemsToken(username, authToken); err != nil {
+			log.Error(err)
+		}
+	}
+
 	/*
 		if err := clients.CheckItemsAdded(items, result); err != nil {
 			log.Error(err)
@@ -338,6 +345,7 @@ func postNotification(sender, receiver, lobbyId string, authToken string) error 
 		Username: receiver,
 		Type:     notifications.WantsToTrade,
 		Content:  contentBytes,
+		TimestampEmitted: ws.MakeTimestamp(),
 	}, authToken)
 
 	if err != nil {
