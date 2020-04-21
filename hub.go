@@ -10,6 +10,7 @@ import (
 	"github.com/NOVAPokemon/utils/notifications"
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
+	notificationMessages "github.com/NOVAPokemon/utils/websockets/notifications"
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -341,12 +342,17 @@ func postNotification(sender, receiver, lobbyId string, authToken string) error 
 		return err
 	}
 
-	err = notificationsClient.AddNotification(utils.Notification{
+	notification := utils.Notification{
 		Username: receiver,
 		Type:     notifications.WantsToTrade,
 		Content:  contentBytes,
-		TimestampEmitted: ws.MakeTimestamp(),
-	}, authToken)
+	}
+
+	notificationMsg := notificationMessages.NewNotificationMessage(notification)
+	notificationMsg.Emit(ws.MakeTimestamp())
+	notificationMsg.LogEmit(notificationMessages.Notification)
+
+	err = notificationsClient.AddNotification(&notificationMsg, authToken)
 
 	if err != nil {
 		log.Error(err)
