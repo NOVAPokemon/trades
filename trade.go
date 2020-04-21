@@ -166,9 +166,6 @@ func handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus, trainer
 	acceptMsg := trades.DeserializeTradeMessage(message).(*trades.AcceptMessage)
 	trade.Players[trainerNum].Accepted = true
 
-	acceptMsg.Receive(ws.MakeTimestamp())
-	acceptMsg.LogReceive(trades.Accept)
-
 	if checkIfBattleFinished(trade) {
 		trade.TradeFinished = true
 	}
