@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -30,7 +29,7 @@ var WaitingTrades = sync.Map{}
 var OngoingTrades = sync.Map{}
 var httpClient = &http.Client{}
 
-var notificationsClient = clients.NewNotificationClient(fmt.Sprintf("%s:%d", utils.Host, utils.NotificationsPort), nil)
+var notificationsClient = clients.NewNotificationClient(nil)
 
 func HandleGetCurrentLobbies(w http.ResponseWriter, r *http.Request) {
 	_, err := tokens.ExtractAndVerifyAuthToken(r.Header)
@@ -162,7 +161,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trainersClient := clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), httpClient)
+	trainersClient := clients.NewTrainersClient(httpClient)
 
 	if !checkItemsToken(*trainersClient, claims.Username, itemsClaims.ItemsHash,
 		r.Header.Get(tokens.AuthTokenHeaderName)) {
