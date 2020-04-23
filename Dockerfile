@@ -6,4 +6,7 @@ RUN mkdir /service
 WORKDIR /service
 COPY $executable .
 
-ENTRYPOINT ./$executable
+COPY dockerize .
+RUN chmod +x dockerize
+
+CMD ["$executable"]
