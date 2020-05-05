@@ -295,14 +295,14 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 	}
 
 	if len(toRemove) > 0 {
-		_, err := trainersClient.RemoveItemsFromBag(username, toRemoveIds, authToken)
+		_, err := trainersClient.RemoveItems(username, toRemoveIds, authToken)
 		if err != nil {
 			return wrapTradeItemsError(err)
 		}
 	}
 
 	if len(toAdd) > 0 {
-		_, err := trainersClient.AddItemsToBag(username, toAdd, authToken)
+		_, err := trainersClient.AddItems(username, toAdd, authToken)
 		if err != nil {
 			return wrapTradeItemsError(err)
 		} else {
