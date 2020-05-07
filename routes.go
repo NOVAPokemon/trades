@@ -5,8 +5,8 @@ import (
 	"github.com/NOVAPokemon/utils/api"
 )
 
-const GetTradesName = "GET_TRADES"
-const StartTradeName = "START_TRADE"
+const GetLobbiesName = "GET_TRADE_LOBBIES"
+const CreateTradeName = "START_TRADE"
 const JoinTradeName = "JOIN_TRADE"
 
 const GET = "GET"
@@ -15,21 +15,21 @@ const POST = "POST"
 var routes = utils.Routes{
 	api.DefaultRoute,
 	utils.Route{
-		Name:        GetTradesName,
+		Name:        GetLobbiesName,
 		Method:      GET,
 		Pattern:     api.GetTradesPath,
-		HandlerFunc: GetCurrentLobbies,
+		HandlerFunc: HandleGetLobbies,
 	},
 	utils.Route{
-		Name:        StartTradeName,
+		Name:        CreateTradeName,
 		Method:      POST,
 		Pattern:     api.StartTradePath,
-		HandlerFunc: CreateTradeLobby,
+		HandlerFunc: HandleCreateTradeLobby,
 	},
 	utils.Route{
 		Name:        JoinTradeName,
 		Method:      GET,
 		Pattern:     api.JoinTradeRoute,
-		HandlerFunc: JoinTradeLobby,
+		HandlerFunc: HandleJoinTradeLobby,
 	},
 }

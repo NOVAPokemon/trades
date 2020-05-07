@@ -20,8 +20,6 @@ import (
 	"time"
 )
 
-const TradeName = "TRADES"
-
 type keyType = string
 type valueType = *TradeLobby
 
@@ -31,10 +29,10 @@ var httpClient = &http.Client{}
 
 var notificationsClient = clients.NewNotificationClient(nil)
 
-func HandleGetCurrentLobbies(w http.ResponseWriter, r *http.Request) {
+func HandleGetLobbies(w http.ResponseWriter, r *http.Request) {
 	_, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
-		log.Error("Unauthenticated clients")
+		utils.LogAndSendHTTPError(&w, wrapGetLobbiesError(err), http.StatusUnauthorized)
 		return
 	}
 
@@ -59,14 +57,15 @@ func HandleGetCurrentLobbies(w http.ResponseWriter, r *http.Request) {
 	log.Infof("Request for trade lobbies, response %+v", availableLobbies)
 	js, err := json.Marshal(availableLobbies)
 	if err != nil {
-		handleError(&w, "Error marshalling json", err)
+		utils.LogAndSendHTTPError(&w, wrapGetLobbiesError(err), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_, err = w.Write(js)
 
+	_, err = w.Write(js)
 	if err != nil {
-		handleError(&w, "Error writing json to body", err)
+		utils.LogAndSendHTTPError(&w, wrapGetLobbiesError(err), http.StatusInternalServerError)
 	}
 }
 
@@ -74,19 +73,25 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	var request api.CreateLobbyRequest
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
-		utils.HandleJSONDecodeError(&w, TradeName, err)
+		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusBadRequest)
 		return
 	}
 
 	authClaims, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
+		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusUnauthorized)
 		return
 	}
 
 	lobbyId := primitive.NewObjectID()
 
-	if postNotification(authClaims.Username, request.Username, lobbyId.Hex(), r.Header.Get(tokens.AuthTokenHeaderName)) != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	sender := authClaims.Username
+	receiver := request.Username
+	authToken := r.Header.Get(tokens.AuthTokenHeaderName)
+
+	err = postNotification(sender, receiver, lobbyId.Hex(), authToken)
+	if err != nil {
+		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
 		return
 	}
 
@@ -100,14 +105,15 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	lobbyBytes, err := json.Marshal(lobbyId)
 	if err != nil {
-		log.Error(err)
+		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(lobbyBytes)
 	if err != nil {
-		handleError(&w, "Error writing json to body", err)
+		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
+		return
 	}
 
 	WaitingTrades.Store(lobbyId.Hex(), &lobby)
@@ -118,54 +124,65 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
-
 	if err != nil {
-		closeConnAndHandleError(conn, &w, "Connection error", err)
+		err = ws.WrapUpgradeConnectionError(err)
+		handleJoinConnError(err, conn)
 		return
 	}
 
 	claims, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
-		closeConnAndHandleError(conn, &w, "could not extract auth token", err)
+		err = ws.WrapUpgradeConnectionError(err)
+		handleJoinConnError(err, conn)
 		return
 	}
 
 	vars := mux.Vars(r)
 	lobbyIdHex, ok := vars[api.TradeIdVar]
 	if !ok {
-		closeConnAndHandleError(conn, &w, "No trade id provided", err)
+		handleJoinConnError(errorNoTradeId, conn)
 		return
 	}
 
 	lobbyId, err := primitive.ObjectIDFromHex(lobbyIdHex)
 	if err != nil {
-		closeConnAndHandleError(conn, &w, "Trade id invalid", err)
+		handleJoinConnError(errorInvalidId, conn)
 		return
 	}
 
-	lobbyInterface, ok := WaitingTrades.Load(lobbyId.Hex())
+	lobbyInterface, ok := WaitingTrades.Load(lobbyIdHex)
 	if !ok {
-		closeConnAndHandleError(conn, &w, "Trade missing", err)
+		err = newTradeLobbyNotFoundError(lobbyIdHex)
+		handleJoinConnError(err, conn)
 		return
 	}
 
 	lobby := lobbyInterface.(valueType)
-
-	if lobby.expected[0] != claims.Username && lobby.expected[1] != claims.Username {
-		closeConnAndHandleError(conn, &w, "player not expected in lobby", nil)
+	username := claims.Username
+	if lobby.expected[0] != username && lobby.expected[1] != username {
+		err = newPlayerNotExpectedError(username)
+		handleJoinConnError(err, conn)
 		return
 	}
 
 	itemsClaims, err := tokens.ExtractAndVerifyItemsToken(r.Header)
 	if err != nil {
+		handleJoinConnError(err, conn)
 		return
 	}
 
-	trainersClient := clients.NewTrainersClient(httpClient)
+	authToken := r.Header.Get(tokens.AuthTokenHeaderName)
 
-	if !checkItemsToken(*trainersClient, claims.Username, itemsClaims.ItemsHash,
-		r.Header.Get(tokens.AuthTokenHeaderName)) {
-		w.WriteHeader(http.StatusBadRequest)
+	trainersClient := clients.NewTrainersClient(httpClient)
+	valid, err := trainersClient.VerifyItems(username,  itemsClaims.ItemsHash, authToken)
+	if err != nil {
+		handleJoinConnError(err, conn)
+		return
+	}
+
+	if !*valid{
+		err = tokens.ErrorInvalidItemsToken
+		handleJoinConnError(err, conn)
 		return
 	}
 
@@ -175,15 +192,17 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	if lobby.wsLobby.TrainersJoined == 2 {
 		WaitingTrades.Delete(lobbyId)
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
+
 		err = lobby.StartTrade()
+
 		if err != nil {
-			log.Error(err)
+			handleJoinConnError(err, conn)
 		} else if lobby.status.TradeFinished {
 			log.Info("Finished trade")
-			commitChanges(trainersClient, lobby)
-			err := checkChanges(trainersClient, lobby)
+
+			err = commitChanges(trainersClient, lobby)
 			if err != nil {
-				log.Error(err)
+				handleJoinConnError(err, conn)
 				return
 			}
 
@@ -204,7 +223,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			updateClients(trades.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
+			updateClients(ws.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
 
 			time.Sleep(2 * time.Second)
 
@@ -216,17 +235,17 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func closeConnAndHandleError(conn *websocket.Conn, w *http.ResponseWriter, errorString string, err error) {
-	log.Error("closing connection")
-	ws.CloseConnection(conn)
-	handleError(w, errorString, err)
-}
+func handleJoinConnError(err error, conn *websocket.Conn) {
+	log.Error(wrapJoinTradeError(err))
 
-func handleError(w *http.ResponseWriter, errorString string, err error) {
-	log.Error(errorString)
-	log.Error(err)
-	http.Error(*w, errorString, http.StatusInternalServerError)
-	return
+	if conn == nil {
+		return
+	}
+
+	err = conn.Close()
+	if err != nil {
+		log.Error(wrapJoinTradeError(err))
+	}
 }
 
 func cleanLobby(lobbyId string, endConnection chan struct{}) {
@@ -240,7 +259,7 @@ func cleanLobby(lobbyId string, endConnection chan struct{}) {
 	}
 }
 
-func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) {
+func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) error {
 	trade := lobby.status
 
 	trainer1Username := lobby.expected[0]
@@ -249,59 +268,43 @@ func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) {
 	items1 := trade.Players[0].Items
 	items2 := trade.Players[1].Items
 
-	tradeItems(trainersClient, trainer1Username, lobby.authTokens[0], items1, items2)
-	lobby.sendTokenToUser(trainersClient, 0)
-
-	tradeItems(trainersClient, trainer2Username, lobby.authTokens[1], items2, items1)
-	lobby.sendTokenToUser(trainersClient, 1)
-
-	log.Warn("Changes committed")
-}
-
-func checkChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) error {
-	trade := lobby.status
-	verified := 0
-
-	for verified < 2 {
-		if len(trade.Players[verified].Items) == 0 {
-			verified++
-			continue
-		} else {
-			correct, err := trainersClient.VerifyItems(lobby.expected[verified],
-				lobby.initialHashes[verified], lobby.authTokens[verified])
-			if err != nil {
-				return err
-			}
-
-			if !*correct {
-				verified++
-			}
-		}
+	err := tradeItems(trainersClient, trainer1Username, lobby.authTokens[0], items1, items2)
+	if err != nil {
+		return wrapCommitChangesError(err)
 	}
 
-	log.Info("users had their items changed")
+	lobby.sendTokenToUser(trainersClient, 0)
+
+	err = tradeItems(trainersClient, trainer2Username, lobby.authTokens[1], items2, items1)
+	if err != nil {
+		return wrapCommitChangesError(err)
+	}
+
+	lobby.sendTokenToUser(trainersClient, 1)
+
+	log.Info("Changes committed")
 
 	return nil
 }
 
-func tradeItems(trainersClient *clients.TrainersClient, username, authToken string, toRemove, toAdd []items.Item) {
+func tradeItems(trainersClient *clients.TrainersClient, username, authToken string,
+	toRemove, toAdd []items.Item) error {
 	toRemoveIds := make([]string, len(toRemove))
 	for i, item := range toRemove {
 		toRemoveIds[i] = item.Id.Hex()
 	}
 
 	if len(toRemove) > 0 {
-		_, err := trainersClient.RemoveItemsFromBag(username, toRemoveIds, authToken)
+		_, err := trainersClient.RemoveItems(username, toRemoveIds, authToken)
 		if err != nil {
-			log.Error(err)
-			return
+			return wrapTradeItemsError(err)
 		}
 	}
 
 	if len(toAdd) > 0 {
-		_, err := trainersClient.AddItemsToBag(username, toAdd, authToken)
+		_, err := trainersClient.AddItems(username, toAdd, authToken)
 		if err != nil {
-			log.Error(err)
+			return wrapTradeItemsError(err)
 		} else {
 			log.Info("items were successfully added")
 		}
@@ -309,29 +312,11 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 
 	if len(toRemove) == 0 && len(toAdd) == 0 {
 		if err := trainersClient.GetItemsToken(username, authToken); err != nil {
-			log.Error(err)
+			return wrapTradeItemsError(err)
 		}
 	}
 
-	/*
-		if err := clients.CheckItemsAdded(items, result); err != nil {
-			log.Error(err)
-		} else {
-			log.Info("items were successfully added")
-		}
-	*/
-}
-
-func checkItemsToken(trainersClient clients.TrainersClient, username string, itemsHash []byte, authToken string) bool {
-	verify, err := trainersClient.VerifyItems(username, itemsHash, authToken)
-	if err != nil {
-		log.Error(err)
-		return false
-	}
-
-	log.Warn("hashes are equal: ", *verify)
-
-	return *verify
+	return nil
 }
 
 func postNotification(sender, receiver, lobbyId string, authToken string) error {
