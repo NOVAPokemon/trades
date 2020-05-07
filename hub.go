@@ -223,7 +223,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			updateClients(trades.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
+			updateClients(ws.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
 
 			time.Sleep(2 * time.Second)
 
