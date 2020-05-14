@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
+	"strings"
 )
 
 const GetLobbiesName = "GET_TRADE_LOBBIES"
@@ -13,7 +14,7 @@ const GET = "GET"
 const POST = "POST"
 
 var routes = utils.Routes{
-	api.DefaultRoute,
+	api.GenStatusRoute(strings.ToLower(serviceName)),
 	utils.Route{
 		Name:        GetLobbiesName,
 		Method:      GET,
