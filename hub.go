@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -26,8 +27,17 @@ type valueType = *TradeLobby
 var WaitingTrades = sync.Map{}
 var OngoingTrades = sync.Map{}
 var httpClient = &http.Client{}
+var serverName string
 
 var notificationsClient = clients.NewNotificationClient(nil)
+
+func init() {
+	if aux, exists := os.LookupEnv(utils.LocationServerNameEnvVar); exists {
+		serverName = aux
+	} else {
+		log.Fatal("Could not load server name")
+	}
+}
 
 func HandleGetLobbies(w http.ResponseWriter, r *http.Request) {
 	_, err := tokens.ExtractAndVerifyAuthToken(r.Header)
@@ -103,14 +113,18 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 		started:        make(chan struct{}),
 	}
 
-	lobbyBytes, err := json.Marshal(lobbyId)
+	resp := api.CreateLobbyResponse{
+		LobbyId:    lobbyId.Hex(),
+		ServerName: serverName,
+	}
+	respBytes, err := json.Marshal(resp)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_, err = w.Write(lobbyBytes)
+	_, err = w.Write(respBytes)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
 		return
@@ -174,13 +188,13 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	authToken := r.Header.Get(tokens.AuthTokenHeaderName)
 
 	trainersClient := clients.NewTrainersClient(httpClient)
-	valid, err := trainersClient.VerifyItems(username,  itemsClaims.ItemsHash, authToken)
+	valid, err := trainersClient.VerifyItems(username, itemsClaims.ItemsHash, authToken)
 	if err != nil {
 		handleJoinConnError(err, conn)
 		return
 	}
 
-	if !*valid{
+	if !*valid {
 		err = tokens.ErrorInvalidItemsToken
 		handleJoinConnError(err, conn)
 		return
@@ -320,7 +334,8 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 }
 
 func postNotification(sender, receiver, lobbyId string, authToken string) error {
-	contentBytes, err := json.Marshal(notifications.WantsToTradeContent{Username: sender, LobbyId: lobbyId})
+	toMarshal := notifications.WantsToTradeContent{Username: sender, LobbyId: lobbyId, ServerName: serverName}
+	contentBytes, err := json.Marshal(toMarshal)
 	if err != nil {
 		log.Error(err)
 		return err
