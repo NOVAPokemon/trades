@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -27,15 +28,23 @@ type valueType = *TradeLobby
 var WaitingTrades = sync.Map{}
 var OngoingTrades = sync.Map{}
 var httpClient = &http.Client{}
+
 var serverName string
+var serviceNameHeadless string
 
 var notificationsClient = clients.NewNotificationClient(nil)
 
 func init() {
-	if aux, exists := os.LookupEnv(utils.LocationServerNameEnvVar); exists {
+	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
 		serverName = aux
 	} else {
 		log.Fatal("Could not load server name")
+	}
+
+	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
+		serviceNameHeadless = aux
+	} else {
+		log.Fatal("Could not load headless service name")
 	}
 }
 
@@ -115,7 +124,7 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	resp := api.CreateLobbyResponse{
 		LobbyId:    lobbyId.Hex(),
-		ServerName: serverName,
+		ServerName: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
 	}
 	respBytes, err := json.Marshal(resp)
 	if err != nil {
@@ -232,15 +241,8 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-timer.C:
 			log.Error("closing lobby since time expired")
-
-			if !lobby.wsLobby.Finished {
-				return
-			}
-
 			updateClients(ws.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
-
 			time.Sleep(2 * time.Second)
-
 			ws.CloseLobby(lobby.wsLobby)
 			return
 		case <-lobby.started:
@@ -334,7 +336,11 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 }
 
 func postNotification(sender, receiver, lobbyId string, authToken string) error {
-	toMarshal := notifications.WantsToTradeContent{Username: sender, LobbyId: lobbyId, ServerName: serverName}
+	toMarshal := notifications.WantsToTradeContent{Username: sender,
+		LobbyId:        lobbyId,
+		ServerHostname: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
+	}
+
 	contentBytes, err := json.Marshal(toMarshal)
 	if err != nil {
 		log.Error(err)
