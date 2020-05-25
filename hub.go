@@ -240,7 +240,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		timer := time.NewTimer(10 * time.Second)
 		select {
 		case <-timer.C:
-			log.Error("closing lobby since time expired")
+			log.Warn("closing lobby since time expired")
 			updateClients(ws.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
 			time.Sleep(2 * time.Second)
 			ws.CloseLobby(lobby.wsLobby)
