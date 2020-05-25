@@ -46,13 +46,14 @@ func (lobby *TradeLobby) StartTrade() error {
 func (lobby *TradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
 
+	wsLobby.Started = true
 	updateClients(ws.StartMessage{}.SerializeToWSMessage(), wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
 	close(lobby.started)
-	wsLobby.Started = true
 
 	var trainerNum int
 	var tradeMessage *ws.Message
 	var msgStr *string
+
 	for {
 		select {
 		case str, ok := <-*wsLobby.TrainerInChannels[0]:
