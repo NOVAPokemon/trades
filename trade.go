@@ -19,6 +19,7 @@ type TradeLobby struct {
 	initialHashes  [2][]byte
 	authTokens     [2]string
 	started        chan struct{}
+	rejected       chan struct{}
 }
 
 func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item, itemsHash []byte,
@@ -50,9 +51,11 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 	updateClients(ws.StartMessage{}.SerializeToWSMessage(), wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
 	close(lobby.started)
 
-	var trainerNum int
-	var tradeMessage *ws.Message
-	var msgStr *string
+	var (
+		trainerNum   int
+		tradeMessage *ws.Message
+		msgStr       *string
+	)
 
 	for {
 		select {

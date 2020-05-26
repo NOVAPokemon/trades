@@ -120,6 +120,7 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 		availableItems: [2]trades.ItemsMap{},
 		initialHashes:  [2][]byte{},
 		started:        make(chan struct{}),
+		rejected:       make(chan struct{}),
 	}
 
 	resp := api.CreateLobbyResponse{
@@ -212,6 +213,8 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
 		r.Header.Get(tokens.AuthTokenHeaderName), conn)
 
+	// TODO this is not working cuz i was assuming that it entered lobby.StartTrade()
+
 	if lobby.wsLobby.TrainersJoined == 2 {
 		WaitingTrades.Delete(lobbyId)
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
@@ -247,8 +250,52 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-lobby.started:
 			return
+		case <-lobby.rejected:
+			updateClients(ws.RejectMessage{}.SerializeToWSMessage(),
+				lobby.wsLobby.TrainerOutChannels[0])
+			time.Sleep(2 * time.Second)
+			ws.CloseLobby(lobby.wsLobby)
+			return
 		}
 	}
+}
+
+func HandleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
+	authClaims, err := tokens.ExtractAndVerifyAuthToken(r.Header)
+	if err != nil {
+		utils.LogAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	lobbyIdHex, ok := vars[api.TradeIdVar]
+	if !ok {
+		utils.LogAndSendHTTPError(&w, wrapRejectTradeError(errorInvalidId), http.StatusBadRequest)
+		return
+	}
+
+	var lobbyInterface interface{}
+	lobbyInterface, ok = OngoingTrades.Load(lobbyIdHex)
+	if !ok {
+		lobbyInterface, ok = WaitingTrades.Load(lobbyIdHex)
+		if !ok {
+			err = newTradeLobbyNotFoundError(lobbyIdHex)
+			utils.LogAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusBadRequest)
+			return
+		}
+	}
+
+	lobby := lobbyInterface.(valueType)
+	for _, trainer := range lobby.expected {
+		if trainer == authClaims.Username {
+			log.Infof("%s rejected invite for lobby %s", trainer, lobbyIdHex)
+			close(lobby.rejected)
+			return
+		}
+	}
+
+	err = newPlayerNotExpectedError(authClaims.Username)
+	utils.LogAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusUnauthorized)
 }
 
 func handleJoinConnError(err error, conn *websocket.Conn) {

@@ -32,6 +32,10 @@ func wrapJoinTradeError(err error) error {
 	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, JoinTradeName))
 }
 
+func wrapRejectTradeError(err error) error {
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, RejectTradeName))
+}
+
 // Other wrappers
 func wrapTradeItemsError(err error) error {
 	return errors.Wrap(err, errorTradeItems)

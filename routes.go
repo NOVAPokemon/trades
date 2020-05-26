@@ -9,6 +9,7 @@ import (
 const GetLobbiesName = "GET_TRADE_LOBBIES"
 const CreateTradeName = "START_TRADE"
 const JoinTradeName = "JOIN_TRADE"
+const RejectTradeName = "REJECT_TRADE"
 
 const GET = "GET"
 const POST = "POST"
@@ -32,5 +33,11 @@ var routes = utils.Routes{
 		Method:      GET,
 		Pattern:     api.JoinTradeRoute,
 		HandlerFunc: HandleJoinTradeLobby,
+	},
+	utils.Route{
+		Name:        RejectTradeName,
+		Method:      POST,
+		Pattern:     api.RejectTradeRoute,
+		HandlerFunc: HandleRejectTradeLobby,
 	},
 }
