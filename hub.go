@@ -22,17 +22,25 @@ import (
 	"time"
 )
 
-type keyType = string
-type valueType = *TradeLobby
+type (
+	keyType   = string
+	valueType = *TradeLobby
+)
 
-var WaitingTrades = sync.Map{}
-var OngoingTrades = sync.Map{}
-var httpClient = &http.Client{}
+const (
+	tradeLobbyTimeout = 30
+)
 
-var serverName string
-var serviceNameHeadless string
+var (
+	WaitingTrades = sync.Map{}
+	OngoingTrades = sync.Map{}
+	httpClient    = &http.Client{}
 
-var notificationsClient = clients.NewNotificationClient(nil)
+	serverName          string
+	serviceNameHeadless string
+
+	notificationsClient = clients.NewNotificationClient(nil)
+)
 
 func init() {
 	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
@@ -240,7 +248,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		log.Info("closing lobby as expected")
 		ws.CloseLobby(lobby.wsLobby)
 	} else {
-		timer := time.NewTimer(10 * time.Second)
+		timer := time.NewTimer(tradeLobbyTimeout * time.Second)
 		select {
 		case <-timer.C:
 			log.Warn("closing lobby since time expired")
