@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	host = utils.ServeHost
-	port = utils.TradesPort
+	host        = utils.ServeHost
+	port        = utils.TradesPort
 	serviceName = "TRADES"
 )
 

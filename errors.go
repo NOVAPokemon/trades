@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	errorTradeItems = "error trading items"
+	errorTradeItems    = "error trading items"
 	errorCommitChanges = "error commiting changes"
 
 	errorTradeLobbyNotFoundFormat = "trade lobby %s not found"
