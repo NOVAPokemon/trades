@@ -190,12 +190,12 @@ func handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus, trainer
 	return trades.UpdateMessageFromTrade(trade, acceptMsg.TrackedMessage).SerializeToWSMessage()
 }
 
-func updateClients(msg *ws.Message, sendTo ...*chan ws.GenericMsg) {
+func updateClients(msg *ws.Message, sendTo ...*ws.SyncChannel) {
 	for _, channel := range sendTo {
-		*channel <- ws.GenericMsg{
+		_ = channel.Write(ws.GenericMsg{
 			MsgType: websocket.TextMessage,
 			Data:    []byte(msg.Serialize()),
-		}
+		})
 	}
 }
 
