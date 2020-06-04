@@ -222,8 +222,6 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
 		r.Header.Get(tokens.AuthTokenHeaderName), conn)
 
-	// TODO this is not working cuz i was assuming that it entered lobby.StartTrade()
-
 	if lobby.wsLobby.TrainersJoined == 2 {
 		WaitingTrades.Delete(lobbyId)
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
@@ -233,7 +231,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			handleJoinConnError(err, conn)
 		} else if lobby.status.TradeFinished {
-			log.Info("Finished trade")
+			log.Infof("Finished trade in lobby %s", lobbyIdHex)
 
 			err = commitChanges(trainersClient, lobby)
 			if err != nil {
@@ -243,18 +241,18 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 			lobby.finish()
 		} else {
-			log.Error("Something went wrong...")
+			log.Errorf("Something went wrong in lobby %s...", lobbyIdHex)
 		}
 
-		log.Info("closing lobby as expected")
+		log.Infof("closing lobby %s as expected", lobbyIdHex)
 		ws.CloseLobby(lobby.wsLobby)
 	} else {
 		timer := time.NewTimer(tradeLobbyTimeout * time.Second)
 		select {
 		case <-timer.C:
-			log.Warn("closing lobby since time expired")
+			log.Warnf("closing lobby %s since time expired", lobbyIdHex)
 			updateClients(ws.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
-			time.Sleep(2 * time.Second)
+			<-lobby.wsLobby.EndConnectionChannels[0]
 			ws.CloseLobby(lobby.wsLobby)
 			return
 		case <-lobby.started:
@@ -262,7 +260,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		case <-lobby.rejected:
 			updateClients(ws.RejectMessage{}.SerializeToWSMessage(),
 				lobby.wsLobby.TrainerOutChannels[0])
-			time.Sleep(2 * time.Second)
+			<-lobby.wsLobby.EndConnectionChannels[0]
 			ws.CloseLobby(lobby.wsLobby)
 			return
 		}

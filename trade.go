@@ -33,6 +33,7 @@ func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item
 }
 
 func (lobby *TradeLobby) StartTrade() error {
+
 	players := [2]trades.Player{
 		{Items: []items.Item{}, Accepted: false},
 		{Items: []items.Item{}, Accepted: false},
