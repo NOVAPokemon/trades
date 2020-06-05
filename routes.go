@@ -17,7 +17,7 @@ const GET = "GET"
 const POST = "POST"
 
 var routes = utils.Routes{
-	api.GenStatusRoute(strings.ToLower(fmt.Sprintf("/%s", serviceName))),
+	api.GenStatusRoute(strings.ToLower(fmt.Sprintf("%s", serviceName))),
 	utils.Route{
 		Name:        GetLobbiesName,
 		Method:      GET,
