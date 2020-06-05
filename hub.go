@@ -219,10 +219,10 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
+	trainerNum := lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
 		r.Header.Get(tokens.AuthTokenHeaderName), conn)
 
-	if lobby.wsLobby.TrainersJoined == 2 {
+	if trainerNum == 2 {
 		WaitingTrades.Delete(lobbyId)
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
 
