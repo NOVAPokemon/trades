@@ -222,6 +222,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	trainerNr, err := lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
 		r.Header.Get(tokens.AuthTokenHeaderName), conn)
+	lobby.joinLock.Unlock()
 
 	if err != nil {
 		handleJoinConnError(err, conn)
