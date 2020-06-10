@@ -27,9 +27,6 @@ type TradeLobby struct {
 
 func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item, itemsHash []byte,
 	authToken string, trainerConn *websocket.Conn) int64 {
-	lobby.joinLock.Lock()
-	defer lobby.joinLock.Unlock()
-
 	numJoined := lobby.wsLobby.TrainersJoined
 	lobby.availableItems[numJoined] = items
 	lobby.authTokens[numJoined] = authToken
