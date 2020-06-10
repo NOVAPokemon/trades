@@ -3,9 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
-	"sync"
-
 	"github.com/NOVAPokemon/utils/clients"
+	errors2 "github.com/NOVAPokemon/utils/clients/errors"
 	"github.com/NOVAPokemon/utils/items"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
@@ -14,7 +13,6 @@ import (
 )
 
 type TradeLobby struct {
-	joinLock       sync.Mutex
 	expected       [2]string
 	wsLobby        *ws.Lobby
 	status         *trades.TradeStatus
@@ -26,19 +24,19 @@ type TradeLobby struct {
 }
 
 func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item, itemsHash []byte,
-	authToken string, trainerConn *websocket.Conn) int64 {
-	lobby.joinLock.Lock()
-	defer lobby.joinLock.Unlock()
+	authToken string, trainerConn *websocket.Conn) (int, error) {
+	trainersJoined, err := ws.AddTrainer(lobby.wsLobby, username, trainerConn)
+	if err != nil {
+		return -1, errors2.WrapAddTrainerError(err)
+	}
 
-	numJoined := lobby.wsLobby.TrainersJoined
-	lobby.availableItems[numJoined] = items
-	lobby.authTokens[numJoined] = authToken
-	lobby.initialHashes[numJoined] = itemsHash
-	return ws.AddTrainer(lobby.wsLobby, username, trainerConn)
+	lobby.availableItems[trainersJoined-1] = items
+	lobby.authTokens[trainersJoined-1] = authToken
+	lobby.initialHashes[trainersJoined-1] = itemsHash
+	return trainersJoined, nil
 }
 
 func (lobby *TradeLobby) StartTrade() error {
-
 	players := [2]trades.Player{
 		{Items: []items.Item{}, Accepted: false},
 		{Items: []items.Item{}, Accepted: false},
@@ -53,11 +51,10 @@ func (lobby *TradeLobby) StartTrade() error {
 
 func (lobby *TradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
-
-	wsLobby.Started = true
 	updateClients(ws.StartMessage{}.SerializeToWSMessage(), wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
+	ws.StartLobby(wsLobby)
 	close(lobby.started)
-
+	emitTradeStart()
 	var (
 		trainerNum   int
 		tradeMessage *ws.Message
@@ -98,6 +95,7 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 		}
 
 		if lobby.status.TradeFinished {
+			emitTradeFinish()
 			return nil
 		}
 	}

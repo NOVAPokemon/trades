@@ -67,7 +67,9 @@ func HandleGetLobbies(w http.ResponseWriter, r *http.Request) {
 	var availableLobbies []utils.Lobby
 	WaitingTrades.Range(func(key, value interface{}) bool {
 		wsLobby := value.(valueType).wsLobby
-		if !wsLobby.Started {
+		select {
+		case <-wsLobby.Started:
+		default:
 			lobbyId, err := primitive.ObjectIDFromHex(key.(keyType))
 			if err != nil {
 				return false
@@ -78,7 +80,6 @@ func HandleGetLobbies(w http.ResponseWriter, r *http.Request) {
 				Username: wsLobby.TrainerUsernames[0],
 			})
 		}
-
 		return true
 	})
 
@@ -125,7 +126,7 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	lobby := TradeLobby{
 		expected:       [2]string{authClaims.Username, request.Username},
-		wsLobby:        ws.NewLobby(lobbyId),
+		wsLobby:        ws.NewLobby(lobbyId, 2),
 		availableItems: [2]trades.ItemsMap{},
 		initialHashes:  [2][]byte{},
 		started:        make(chan struct{}),
@@ -219,10 +220,15 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trainerNum := lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
+	trainerNr, err := lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
 		r.Header.Get(tokens.AuthTokenHeaderName), conn)
 
-	if trainerNum == 2 {
+	if err != nil {
+		handleJoinConnError(err, conn)
+		return
+	}
+
+	if trainerNr == 2 {
 		WaitingTrades.Delete(lobbyId)
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
 
@@ -243,7 +249,6 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Errorf("Something went wrong in lobby %s...", lobbyIdHex)
 		}
-
 		log.Infof("closing lobby %s as expected", lobbyIdHex)
 		ws.CloseLobby(lobby.wsLobby)
 	} else {
