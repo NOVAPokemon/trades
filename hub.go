@@ -249,7 +249,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			log.Errorf("Something went wrong in lobby %s...", lobbyIdHex)
 		}
 		log.Infof("closing lobby %s as expected", lobbyIdHex)
-		ws.CloseLobby(lobby.wsLobby)
+		ws.CloseLobbyConnections(lobby.wsLobby)
 	} else {
 		timer := time.NewTimer(tradeLobbyTimeout * time.Second)
 		select {
@@ -257,7 +257,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			log.Warnf("closing lobby %s since time expired", lobbyIdHex)
 			updateClients(ws.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
 			<-lobby.wsLobby.EndConnectionChannels[0]
-			ws.CloseLobby(lobby.wsLobby)
+			ws.CloseLobbyConnections(lobby.wsLobby)
 			return
 		case <-lobby.wsLobby.Started:
 			return
@@ -265,7 +265,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			updateClients(ws.RejectMessage{}.SerializeToWSMessage(),
 				lobby.wsLobby.TrainerOutChannels[0])
 			<-lobby.wsLobby.EndConnectionChannels[0]
-			ws.CloseLobby(lobby.wsLobby)
+			ws.CloseLobbyConnections(lobby.wsLobby)
 			return
 		}
 	}

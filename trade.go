@@ -61,13 +61,13 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 
 	for {
 		select {
-		case str, ok := <-*wsLobby.TrainerInChannels[0]:
+		case str, ok := <-wsLobby.TrainerInChannels[0]:
 			if !ok {
 				continue
 			}
 			trainerNum = 0
 			msgStr = str
-		case str, ok := <-*wsLobby.TrainerInChannels[1]:
+		case str, ok := <-wsLobby.TrainerInChannels[1]:
 			if !ok {
 				continue
 			}
@@ -191,12 +191,12 @@ func handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus, trainer
 	return trades.UpdateMessageFromTrade(trade, acceptMsg.TrackedMessage).SerializeToWSMessage()
 }
 
-func updateClients(msg *ws.Message, sendTo ...*ws.SyncChannel) {
+func updateClients(msg *ws.Message, sendTo ...chan ws.GenericMsg) {
 	for _, channel := range sendTo {
-		_ = channel.Write(ws.GenericMsg{
+		channel <- ws.GenericMsg{
 			MsgType: websocket.TextMessage,
 			Data:    []byte(msg.Serialize()),
-		})
+		}
 	}
 }
 
