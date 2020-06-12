@@ -24,7 +24,7 @@ import (
 )
 
 type (
-	keyType = string
+	keyType   = string
 	valueType = *TradeLobby
 )
 
