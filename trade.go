@@ -19,7 +19,6 @@ type TradeLobby struct {
 	availableItems [2]trades.ItemsMap
 	initialHashes  [2][]byte
 	authTokens     [2]string
-	started        chan struct{}
 	rejected       chan struct{}
 }
 
@@ -53,7 +52,6 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
 	updateClients(ws.StartMessage{}.SerializeToWSMessage(), wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
 	ws.StartLobby(wsLobby)
-	close(lobby.started)
 	emitTradeStart()
 	var (
 		trainerNum   int

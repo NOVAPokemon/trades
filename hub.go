@@ -24,7 +24,7 @@ import (
 )
 
 type (
-	keyType   = string
+	keyType = string
 	valueType = *TradeLobby
 )
 
@@ -129,7 +129,6 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 		wsLobby:        ws.NewLobby(lobbyId, 2),
 		availableItems: [2]trades.ItemsMap{},
 		initialHashes:  [2][]byte{},
-		started:        make(chan struct{}),
 		rejected:       make(chan struct{}),
 	}
 
@@ -260,7 +259,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			<-lobby.wsLobby.EndConnectionChannels[0]
 			ws.CloseLobby(lobby.wsLobby)
 			return
-		case <-lobby.started:
+		case <-lobby.wsLobby.Started:
 			return
 		case <-lobby.rejected:
 			updateClients(ws.RejectMessage{}.SerializeToWSMessage(),
