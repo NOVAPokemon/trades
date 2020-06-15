@@ -81,6 +81,10 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 
 		lobby.handleChannelMessage(msgStr, &lobby.availableItems, lobby.status, trainerNum)
 
+		if lobby.status.TradeFinished {
+			lobby.finish()
+		}
+
 		select {
 		case <-lobby.wsLobby.Finished:
 			return nil
@@ -187,8 +191,7 @@ func (lobby *TradeLobby) handleAcceptMessage(message *ws.Message, trade *trades.
 	trade.Players[trainerNum].Accepted = true
 
 	if checkIfTradeFinished(trade) {
-		lobby.finish()
-		return nil
+		trade.TradeFinished = true
 	}
 
 	return trades.UpdateMessageFromTrade(trade, acceptMsg.TrackedMessage).SerializeToWSMessage()
