@@ -55,9 +55,8 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 	ws.StartLobby(wsLobby)
 	emitTradeStart()
 	var (
-		trainerNum   int
-		tradeMessage *ws.Message
-		msgStr       *string
+		trainerNum int
+		msgStr     *string
 	)
 
 	for {
@@ -80,33 +79,25 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 			return errors.New("error during trade on user 1")
 		}
 
-		tradeMessage = handleChannelMessage(msgStr, &lobby.availableItems, lobby.status, trainerNum)
-		if tradeMessage == nil {
-			log.Error("trade message was nil")
-			return nil
+		if err := lobby.handleChannelMessage(msgStr, &lobby.availableItems, lobby.status, trainerNum); err != nil {
+			return err
 		}
 
-		switch tradeMessage.MsgType {
-		case ws.Error:
-			updateClients(tradeMessage, wsLobby.TrainerOutChannels[trainerNum])
-		case trades.Update:
-			updateClients(tradeMessage, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
-		}
-
-		if lobby.status.TradeFinished {
-			emitTradeFinish()
+		select {
+		case <-lobby.wsLobby.Finished:
 			return nil
+		default:
 		}
 	}
 }
 
 func (lobby *TradeLobby) finish() {
+	ws.FinishLobby(lobby.wsLobby)
 	finishMessage := ws.FinishMessage{Success: true}.SerializeToWSMessage()
-
 	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
-
 	<-lobby.wsLobby.EndConnectionChannels[0]
 	<-lobby.wsLobby.EndConnectionChannels[1]
+	emitTradeFinish()
 }
 
 func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient, trainerNum int) {
@@ -115,25 +106,39 @@ func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient,
 		lobby.wsLobby.TrainerOutChannels[trainerNum])
 }
 
-func handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,
-	status *trades.TradeStatus, trainerNum int) *ws.Message {
+func (lobby *TradeLobby) handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,
+	status *trades.TradeStatus, trainerNum int) error {
 
 	msg, err := ws.ParseMessage(msgStr)
+	var answerMsg *ws.Message
 	if err != nil {
-		return trades.ErrorParsing
+		answerMsg = trades.ErrorParsing
+	} else {
+		answerMsg = lobby.handleMessage(msg, availableItems, status, trainerNum)
 	}
 
-	return handleMessage(msg, availableItems, status, trainerNum)
+	if answerMsg == nil {
+		return errors.New("trade message was nil")
+	}
+
+	switch answerMsg.MsgType {
+	case ws.Error:
+		updateClients(answerMsg, lobby.wsLobby.TrainerOutChannels[trainerNum])
+	case trades.Update:
+		updateClients(answerMsg, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
+	}
+
+	return nil
 }
 
-func handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
+func (lobby *TradeLobby) handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	status *trades.TradeStatus, trainerNum int) *ws.Message {
 
 	switch message.MsgType {
 	case trades.Trade:
 		return handleTradeMessage(message, availableItems, status, trainerNum)
 	case trades.Accept:
-		return handleAcceptMessage(message, status, trainerNum)
+		return lobby.handleAcceptMessage(message, status, trainerNum)
 	default:
 		return ws.ErrorMessage{
 			Info:  fmt.Sprintf("invalid msg type %s", message.MsgType),
@@ -175,7 +180,7 @@ func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	return trades.UpdateMessageFromTrade(trade, tradeMsg.TrackedMessage).SerializeToWSMessage()
 }
 
-func handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus, trainerNum int) *ws.Message {
+func (lobby *TradeLobby) handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus, trainerNum int) *ws.Message {
 	desMsg, err := trades.DeserializeTradeMessage(message)
 	if err != nil {
 		log.Error(err)
@@ -185,8 +190,8 @@ func handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus, trainer
 	acceptMsg := desMsg.(*trades.AcceptMessage)
 	trade.Players[trainerNum].Accepted = true
 
-	if checkIfBattleFinished(trade) {
-		trade.TradeFinished = true
+	if checkIfTradeFinished(trade) {
+		lobby.finish()
 	}
 
 	return trades.UpdateMessageFromTrade(trade, acceptMsg.TrackedMessage).SerializeToWSMessage()
@@ -201,6 +206,6 @@ func updateClients(msg *ws.Message, sendTo ...chan ws.GenericMsg) {
 	}
 }
 
-func checkIfBattleFinished(trade *trades.TradeStatus) bool {
+func checkIfTradeFinished(trade *trades.TradeStatus) bool {
 	return trade.Players[0].Accepted && trade.Players[1].Accepted
 }

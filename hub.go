@@ -24,7 +24,7 @@ import (
 )
 
 type (
-	keyType   = string
+	keyType = string
 	valueType = *TradeLobby
 )
 
@@ -152,7 +152,7 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	WaitingTrades.Store(lobbyId.Hex(), &lobby)
 	log.Info("created lobby ", lobbyId)
 
-	go cleanLobby(lobbyId.Hex(), lobby.wsLobby.EndConnectionChannels[lobby.wsLobby.TrainersJoined])
+	go cleanLobby(&lobby)
 }
 
 func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
@@ -230,44 +230,26 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	if trainerNr == 2 {
 		WaitingTrades.Delete(lobbyId)
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
-
 		err = lobby.StartTrade()
 
 		if err != nil {
 			handleJoinConnError(err, conn)
-		} else if lobby.status.TradeFinished {
-			log.Infof("Finished trade in lobby %s", lobbyIdHex)
-
-			err = commitChanges(trainersClient, lobby)
-			if err != nil {
-				handleJoinConnError(err, conn)
-				return
-			}
-
-			lobby.finish()
 		} else {
-			log.Errorf("Something went wrong in lobby %s...", lobbyIdHex)
+			select {
+			case <-lobby.wsLobby.Finished:
+				log.Infof("Finished trade in lobby %s", lobbyIdHex)
+				err = commitChanges(trainersClient, lobby)
+				if err != nil {
+					handleJoinConnError(err, conn)
+					return
+				}
+			default:
+				log.Errorf("Something went wrong in lobby %s...", lobbyIdHex)
+			}
 		}
 		log.Infof("closing lobby %s as expected", lobbyIdHex)
 		ws.CloseLobbyConnections(lobby.wsLobby)
-	} else {
-		timer := time.NewTimer(tradeLobbyTimeout * time.Second)
-		select {
-		case <-timer.C:
-			log.Warnf("closing lobby %s since time expired", lobbyIdHex)
-			updateClients(ws.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
-			<-lobby.wsLobby.EndConnectionChannels[0]
-			ws.CloseLobbyConnections(lobby.wsLobby)
-			return
-		case <-lobby.wsLobby.Started:
-			return
-		case <-lobby.rejected:
-			updateClients(ws.RejectMessage{}.SerializeToWSMessage(),
-				lobby.wsLobby.TrainerOutChannels[0])
-			<-lobby.wsLobby.EndConnectionChannels[0]
-			ws.CloseLobbyConnections(lobby.wsLobby)
-			return
-		}
+		OngoingTrades.Delete(lobby.wsLobby.Id.Hex())
 	}
 }
 
@@ -322,14 +304,22 @@ func handleJoinConnError(err error, conn *websocket.Conn) {
 	}
 }
 
-func cleanLobby(lobbyId string, endConnection chan struct{}) {
-	for {
-		select {
-		case <-endConnection:
-			WaitingTrades.Delete(lobbyId)
-			OngoingTrades.Delete(lobbyId)
-			return
+func cleanLobby(lobby *TradeLobby) {
+	timer := time.NewTimer(tradeLobbyTimeout * time.Second)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
+		ws.CloseLobbyConnections(lobby.wsLobby)
+		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
+	case <-lobby.rejected:
+		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
+			updateClients(ws.RejectMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
+			<-lobby.wsLobby.EndConnectionChannels[0]
 		}
+		ws.CloseLobbyConnections(lobby.wsLobby)
+		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
+	case <-lobby.wsLobby.Started:
 	}
 }
 
