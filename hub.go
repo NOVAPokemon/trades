@@ -228,7 +228,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if trainerNr == 2 {
-		WaitingTrades.Delete(lobbyId)
+		WaitingTrades.Delete(lobbyId.Hex())
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
 
 		if err := lobby.StartTrade(); err != nil {
