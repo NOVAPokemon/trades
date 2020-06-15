@@ -230,21 +230,14 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	if trainerNr == 2 {
 		WaitingTrades.Delete(lobbyId)
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
-		err = lobby.StartTrade()
 
-		if err != nil {
+		if err := lobby.StartTrade(); err != nil {
 			handleJoinConnError(err, conn)
 		} else {
-			select {
-			case <-lobby.wsLobby.Finished:
-				log.Infof("Finished trade in lobby %s", lobbyIdHex)
-				err = commitChanges(trainersClient, lobby)
-				if err != nil {
-					handleJoinConnError(err, conn)
-					return
-				}
-			default:
-				log.Errorf("Something went wrong in lobby %s...", lobbyIdHex)
+			err = commitChanges(trainersClient, lobby)
+			if err != nil {
+				handleJoinConnError(err, conn)
+				return
 			}
 		}
 		log.Infof("closing lobby %s as expected", lobbyIdHex)

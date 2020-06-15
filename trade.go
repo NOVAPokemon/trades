@@ -79,9 +79,7 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 			return errors.New("error during trade on user 1")
 		}
 
-		if err := lobby.handleChannelMessage(msgStr, &lobby.availableItems, lobby.status, trainerNum); err != nil {
-			return err
-		}
+		lobby.handleChannelMessage(msgStr, &lobby.availableItems, lobby.status, trainerNum)
 
 		select {
 		case <-lobby.wsLobby.Finished:
@@ -107,7 +105,7 @@ func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient,
 }
 
 func (lobby *TradeLobby) handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,
-	status *trades.TradeStatus, trainerNum int) error {
+	status *trades.TradeStatus, trainerNum int) {
 
 	msg, err := ws.ParseMessage(msgStr)
 	var answerMsg *ws.Message
@@ -118,7 +116,7 @@ func (lobby *TradeLobby) handleChannelMessage(msgStr *string, availableItems *[2
 	}
 
 	if answerMsg == nil {
-		return errors.New("trade message was nil")
+		return
 	}
 
 	switch answerMsg.MsgType {
@@ -127,8 +125,6 @@ func (lobby *TradeLobby) handleChannelMessage(msgStr *string, availableItems *[2
 	case trades.Update:
 		updateClients(answerMsg, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
 	}
-
-	return nil
 }
 
 func (lobby *TradeLobby) handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
@@ -192,6 +188,7 @@ func (lobby *TradeLobby) handleAcceptMessage(message *ws.Message, trade *trades.
 
 	if checkIfTradeFinished(trade) {
 		lobby.finish()
+		return nil
 	}
 
 	return trades.UpdateMessageFromTrade(trade, acceptMsg.TrackedMessage).SerializeToWSMessage()
