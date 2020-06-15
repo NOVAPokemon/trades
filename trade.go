@@ -81,10 +81,6 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 
 		lobby.handleChannelMessage(msgStr, &lobby.availableItems, lobby.status, trainerNum)
 
-		if lobby.status.TradeFinished {
-			lobby.finish()
-		}
-
 		select {
 		case <-lobby.wsLobby.Finished:
 			return nil

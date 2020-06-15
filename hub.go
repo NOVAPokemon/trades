@@ -239,6 +239,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 				handleJoinConnError(err, conn)
 				return
 			}
+			lobby.finish()
 		}
 		log.Infof("closing lobby %s as expected", lobbyIdHex)
 		ws.CloseLobbyConnections(lobby.wsLobby)
