@@ -305,7 +305,9 @@ func cleanLobby(lobby *TradeLobby) {
 	case <-timer.C:
 		log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
-			updateClients(ws.FinishMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
+			updateClients(ws.FinishMessage{
+				Success:       false,
+			}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
 			<-lobby.wsLobby.EndConnectionChannels[0]
 		}
 		ws.CloseLobbyConnections(lobby.wsLobby)
