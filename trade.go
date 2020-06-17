@@ -23,8 +23,11 @@ type TradeLobby struct {
 	itemsLock      sync.Mutex
 
 	initialHashes [2][]byte
-	authTokens    [2]string
-	rejected      chan struct{}
+
+	authTokens [2]string
+	tokensLock sync.Mutex
+
+	rejected chan struct{}
 }
 
 func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item, itemsHash []byte,
@@ -38,7 +41,10 @@ func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item
 	lobby.availableItems[trainersJoined-1] = items
 	lobby.itemsLock.Unlock()
 
+	lobby.tokensLock.Lock()
 	lobby.authTokens[trainersJoined-1] = authToken
+	lobby.tokensLock.Unlock()
+
 	lobby.initialHashes[trainersJoined-1] = itemsHash
 	return trainersJoined, nil
 }

@@ -333,8 +333,10 @@ func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) er
 	items1 := trade.Players[0].Items
 	items2 := trade.Players[1].Items
 
+	lobby.tokensLock.Lock()
 	err := tradeItems(trainersClient, trainer1Username, lobby.authTokens[0], items1, items2)
 	if err != nil {
+		lobby.tokensLock.Unlock()
 		return wrapCommitChangesError(err)
 	}
 
@@ -342,8 +344,10 @@ func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) er
 
 	err = tradeItems(trainersClient, trainer2Username, lobby.authTokens[1], items2, items1)
 	if err != nil {
+		lobby.tokensLock.Unlock()
 		return wrapCommitChangesError(err)
 	}
+	lobby.tokensLock.Unlock()
 
 	lobby.sendTokenToUser(trainersClient, 1)
 
