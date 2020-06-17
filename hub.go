@@ -242,6 +242,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			}
 			lobby.finish()
 		}
+		emitTradeFinish()
 		log.Infof("closing lobby %s as expected", lobbyIdHex)
 		ws.CloseLobbyConnections(lobby.wsLobby)
 		OngoingTrades.Delete(lobby.wsLobby.Id.Hex())
