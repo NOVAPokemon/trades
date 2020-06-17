@@ -24,7 +24,7 @@ import (
 )
 
 type (
-	keyType = string
+	keyType   = string
 	valueType = *TradeLobby
 )
 
@@ -130,6 +130,7 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 		availableItems: [2]trades.ItemsMap{},
 		initialHashes:  [2][]byte{},
 		rejected:       make(chan struct{}),
+		itemsLock:      sync.Mutex{},
 	}
 
 	resp := api.CreateLobbyResponse{
@@ -306,7 +307,7 @@ func cleanLobby(lobby *TradeLobby) {
 		log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
 			updateClients(ws.FinishMessage{
-				Success:       false,
+				Success: false,
 			}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
 			<-lobby.wsLobby.EndConnectionChannels[0]
 		}

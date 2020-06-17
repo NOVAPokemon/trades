@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/NOVAPokemon/utils/clients"
 	errors2 "github.com/NOVAPokemon/utils/clients/errors"
@@ -14,13 +15,16 @@ import (
 )
 
 type TradeLobby struct {
-	expected       [2]string
-	wsLobby        *ws.Lobby
-	status         *trades.TradeStatus
+	expected [2]string
+	wsLobby  *ws.Lobby
+	status   *trades.TradeStatus
+
 	availableItems [2]trades.ItemsMap
-	initialHashes  [2][]byte
-	authTokens     [2]string
-	rejected       chan struct{}
+	itemsLock      sync.Mutex
+
+	initialHashes [2][]byte
+	authTokens    [2]string
+	rejected      chan struct{}
 }
 
 func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item, itemsHash []byte,
@@ -30,7 +34,10 @@ func (lobby *TradeLobby) AddTrainer(username string, items map[string]items.Item
 		return -1, errors2.WrapAddTrainerError(err)
 	}
 
+	lobby.itemsLock.Lock()
 	lobby.availableItems[trainersJoined-1] = items
+	lobby.itemsLock.Unlock()
+
 	lobby.authTokens[trainersJoined-1] = authToken
 	lobby.initialHashes[trainersJoined-1] = itemsHash
 	return trainersJoined, nil
@@ -79,7 +86,7 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 			return errors.New("error during trade on user 1")
 		}
 
-		lobby.handleChannelMessage(msgStr, &lobby.availableItems, lobby.status, trainerNum)
+		lobby.handleChannelMessage(msgStr, lobby.status, trainerNum)
 
 		if lobby.status.TradeFinished {
 			return nil
@@ -102,15 +109,14 @@ func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient,
 		lobby.wsLobby.TrainerOutChannels[trainerNum])
 }
 
-func (lobby *TradeLobby) handleChannelMessage(msgStr *string, availableItems *[2]trades.ItemsMap,
-	status *trades.TradeStatus, trainerNum int) {
+func (lobby *TradeLobby) handleChannelMessage(msgStr *string, status *trades.TradeStatus, trainerNum int) {
 
 	msg, err := ws.ParseMessage(msgStr)
 	var answerMsg *ws.Message
 	if err != nil {
 		answerMsg = trades.ErrorParsing
 	} else {
-		answerMsg = lobby.handleMessage(msg, availableItems, status, trainerNum)
+		answerMsg = lobby.handleMessage(msg, status, trainerNum)
 	}
 
 	if answerMsg == nil {
@@ -125,12 +131,11 @@ func (lobby *TradeLobby) handleChannelMessage(msgStr *string, availableItems *[2
 	}
 }
 
-func (lobby *TradeLobby) handleMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
-	status *trades.TradeStatus, trainerNum int) *ws.Message {
+func (lobby *TradeLobby) handleMessage(message *ws.Message, status *trades.TradeStatus, trainerNum int) *ws.Message {
 
 	switch message.MsgType {
 	case trades.Trade:
-		return handleTradeMessage(message, availableItems, status, trainerNum)
+		return lobby.handleTradeMessage(message, status, trainerNum)
 	case trades.Accept:
 		return lobby.handleAcceptMessage(message, status, trainerNum)
 	default:
@@ -141,8 +146,8 @@ func (lobby *TradeLobby) handleMessage(message *ws.Message, availableItems *[2]t
 	}
 }
 
-func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
-	trade *trades.TradeStatus, trainerNum int) *ws.Message {
+func (lobby *TradeLobby) handleTradeMessage(message *ws.Message, trade *trades.TradeStatus,
+	trainerNum int) *ws.Message {
 	desMsg, err := trades.DeserializeTradeMessage(message)
 	if err != nil {
 		log.Error(err)
@@ -152,7 +157,10 @@ func handleTradeMessage(message *ws.Message, availableItems *[2]trades.ItemsMap,
 	tradeMsg := desMsg.(*trades.TradeMessage)
 
 	itemId := tradeMsg.ItemId
-	item, ok := (*availableItems)[trainerNum][itemId]
+
+	lobby.itemsLock.Lock()
+	item, ok := lobby.availableItems[trainerNum][itemId]
+	lobby.itemsLock.Unlock()
 
 	if !ok {
 		return ws.ErrorMessage{
