@@ -241,6 +241,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			}
 			lobby.finish()
 		}
+		emitTradeFinish()
 		log.Infof("closing lobby %s as expected", lobbyIdHex)
 		ws.CloseLobbyConnections(lobby.wsLobby)
 		OngoingTrades.Delete(lobby.wsLobby.Id.Hex())
@@ -306,7 +307,7 @@ func cleanLobby(lobby *TradeLobby) {
 		log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
 			updateClients(ws.FinishMessage{
-				Success:       false,
+				Success: false,
 			}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
 			<-lobby.wsLobby.EndConnectionChannels[0]
 		}

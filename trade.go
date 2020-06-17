@@ -93,7 +93,6 @@ func (lobby *TradeLobby) finish() {
 	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
 	<-lobby.wsLobby.EndConnectionChannels[0]
 	<-lobby.wsLobby.EndConnectionChannels[1]
-	emitTradeFinish()
 }
 
 func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient, trainerNum int) {
