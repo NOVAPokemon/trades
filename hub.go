@@ -24,7 +24,7 @@ import (
 )
 
 type (
-	keyType   = string
+	keyType = string
 	valueType = *TradeLobby
 )
 
@@ -118,12 +118,6 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	receiver := request.Username
 	authToken := r.Header.Get(tokens.AuthTokenHeaderName)
 
-	err = postNotification(sender, receiver, lobbyId.Hex(), authToken)
-	if err != nil {
-		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
-		return
-	}
-
 	lobby := TradeLobby{
 		expected:       [2]string{authClaims.Username, request.Username},
 		wsLobby:        ws.NewLobby(lobbyId, 2),
@@ -154,6 +148,12 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	log.Info("created lobby ", lobbyId)
 
 	go cleanLobby(&lobby)
+
+	err = postNotification(sender, receiver, lobbyId.Hex(), authToken)
+	if err != nil {
+		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
+		return
+	}
 }
 
 func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
