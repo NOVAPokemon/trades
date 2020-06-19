@@ -305,19 +305,27 @@ func cleanLobby(lobby *TradeLobby) {
 	defer timer.Stop()
 	select {
 	case <-timer.C:
-		log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
-			updateClients(ws.FinishMessage{
-				Success: false,
-			}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
-			<-lobby.wsLobby.EndConnectionChannels[0]
+			log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
+			select {
+			case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
+				MsgType: websocket.TextMessage,
+				Data:    []byte(ws.FinishMessage{Success: false}.SerializeToWSMessage().Serialize()),
+			}:
+			case <-lobby.wsLobby.EndConnectionChannels[0]:
+			}
 		}
 		ws.CloseLobbyConnections(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.rejected:
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
-			updateClients(ws.RejectMessage{}.SerializeToWSMessage(), lobby.wsLobby.TrainerOutChannels[0])
-			<-lobby.wsLobby.EndConnectionChannels[0]
+			select {
+			case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
+				MsgType: websocket.TextMessage,
+				Data:    []byte(ws.RejectMessage{}.SerializeToWSMessage().Serialize()),
+			}:
+			case <-lobby.wsLobby.EndConnectionChannels[0]:
+			}
 		}
 		ws.CloseLobbyConnections(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
@@ -349,11 +357,8 @@ func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) er
 		return wrapCommitChangesError(err)
 	}
 	lobby.tokensLock.Unlock()
-
 	lobby.sendTokenToUser(trainersClient, 1)
-
 	log.Info("Changes committed")
-
 	return nil
 }
 
