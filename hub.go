@@ -114,10 +114,6 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	lobbyId := primitive.NewObjectID()
 
-	sender := authClaims.Username
-	receiver := request.Username
-	authToken := r.Header.Get(tokens.AuthTokenHeaderName)
-
 	lobby := TradeLobby{
 		expected:       [2]string{authClaims.Username, request.Username},
 		wsLobby:        ws.NewLobby(lobbyId, 2),
@@ -148,12 +144,6 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	log.Info("created lobby ", lobbyId)
 
 	go cleanLobby(&lobby)
-
-	err = postNotification(sender, receiver, lobbyId.Hex(), authToken)
-	if err != nil {
-		utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
-		return
-	}
 }
 
 func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
@@ -246,6 +236,12 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		log.Infof("closing lobby %s as expected", lobbyIdHex)
 		ws.CloseLobbyConnections(lobby.wsLobby)
 		OngoingTrades.Delete(lobby.wsLobby.Id.Hex())
+	} else {
+		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
+		if err != nil {
+			utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
