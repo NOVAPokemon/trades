@@ -308,7 +308,7 @@ func cleanLobby(lobby *TradeLobby) {
 				MsgType: websocket.TextMessage,
 				Data:    []byte(ws.FinishMessage{Success: false}.SerializeToWSMessage().Serialize()),
 			}:
-			case <-lobby.wsLobby.EndConnectionChannels[0]:
+				<-lobby.wsLobby.EndConnectionChannels[0]
 			}
 		}
 		ws.CloseLobbyConnections(lobby.wsLobby)
@@ -320,7 +320,7 @@ func cleanLobby(lobby *TradeLobby) {
 				MsgType: websocket.TextMessage,
 				Data:    []byte(ws.RejectMessage{}.SerializeToWSMessage().Serialize()),
 			}:
-			case <-lobby.wsLobby.EndConnectionChannels[0]:
+				<-lobby.wsLobby.EndConnectionChannels[0]
 			}
 		}
 		ws.CloseLobbyConnections(lobby.wsLobby)
