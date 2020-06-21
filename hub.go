@@ -311,6 +311,7 @@ func cleanLobby(lobby *TradeLobby) {
 				<-lobby.wsLobby.EndConnectionChannels[0]
 			}
 		}
+		lobby.finish()
 		ws.CloseLobbyConnections(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.rejected:
@@ -323,6 +324,7 @@ func cleanLobby(lobby *TradeLobby) {
 				<-lobby.wsLobby.EndConnectionChannels[0]
 			}
 		}
+		lobby.finish()
 		ws.CloseLobbyConnections(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.wsLobby.Started:
