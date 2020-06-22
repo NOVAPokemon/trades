@@ -230,11 +230,10 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 				handleJoinConnError(err, conn)
 				return
 			}
-			lobby.finish()
 		}
 		emitTradeFinish()
+		lobby.finish()
 		log.Infof("closing lobby %s as expected", lobbyIdHex)
-		ws.CloseLobbyConnections(lobby.wsLobby)
 		OngoingTrades.Delete(lobby.wsLobby.Id.Hex())
 	} else {
 		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
@@ -308,11 +307,13 @@ func cleanLobby(lobby *TradeLobby) {
 				MsgType: websocket.TextMessage,
 				Data:    []byte(ws.FinishMessage{Success: false}.SerializeToWSMessage().Serialize()),
 			}:
-				<-lobby.wsLobby.EndConnectionChannels[0]
+				select { // wait for proper finish of routine
+				case <-lobby.wsLobby.DoneListeningFromConn[0]:
+				case <-time.After(5 * time.Second):
+				}
 			}
 		}
 		lobby.finish()
-		ws.CloseLobbyConnections(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.rejected:
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
@@ -321,11 +322,13 @@ func cleanLobby(lobby *TradeLobby) {
 				MsgType: websocket.TextMessage,
 				Data:    []byte(ws.RejectMessage{}.SerializeToWSMessage().Serialize()),
 			}:
-				<-lobby.wsLobby.EndConnectionChannels[0]
+				select { // wait for proper finish of routine
+				case <-lobby.wsLobby.DoneListeningFromConn[0]:
+				case <-time.After(5 * time.Second):
+				}
 			}
 		}
 		lobby.finish()
-		ws.CloseLobbyConnections(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.wsLobby.Started:
 	}
