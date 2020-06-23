@@ -223,17 +223,17 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
 
 		if err := lobby.StartTrade(); err != nil {
-			handleJoinConnError(err, conn)
+			ws.FinishLobby(lobby.wsLobby) // abort lobby on error
 		} else {
 			err = commitChanges(trainersClient, lobby)
 			if err != nil {
 				handleJoinConnError(err, conn)
 				return
 			}
+			emitTradeFinish()
+			lobby.finish()
+			log.Infof("closing lobby %s as expected", lobbyIdHex)
 		}
-		emitTradeFinish()
-		lobby.finish()
-		log.Infof("closing lobby %s as expected", lobbyIdHex)
 		OngoingTrades.Delete(lobby.wsLobby.Id.Hex())
 	} else {
 		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
@@ -351,7 +351,6 @@ func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) er
 	}
 
 	lobby.sendTokenToUser(trainersClient, 0)
-
 	err = tradeItems(trainersClient, trainer2Username, lobby.authTokens[1], items2, items1)
 	if err != nil {
 		lobby.tokensLock.Unlock()
