@@ -90,10 +90,10 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 			return errors.New("error during trade on user 0")
 		case <-wsLobby.DoneListeningFromConn[1]:
 			return errors.New("error during trade on user 1")
-		case <-wsLobby.DoneWritingToConn[1]:
-			return errors.New("error during trade on user 0")
 		case <-wsLobby.DoneWritingToConn[0]:
 			return errors.New("error during trade on user 0")
+		case <-wsLobby.DoneWritingToConn[1]:
+			return errors.New("error during trade on user 1")
 		}
 
 		lobby.handleChannelMessage(msg, lobby.status, trainerNum)
@@ -105,11 +105,11 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 }
 
 func (lobby *TradeLobby) finish() {
-	ws.FinishLobby(lobby.wsLobby)
 	finishMessage := ws.FinishMessage{Success: true}.SerializeToWSMessage()
 	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
 	<-lobby.wsLobby.DoneListeningFromConn[0]
 	<-lobby.wsLobby.DoneListeningFromConn[1]
+	ws.FinishLobby(lobby.wsLobby)
 }
 
 func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient, trainerNum int) {
