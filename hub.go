@@ -223,18 +223,17 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		OngoingTrades.Store(lobbyId.Hex(), lobby)
 
 		if err := lobby.StartTrade(); err != nil {
-			handleJoinConnError(err, conn)
-		} else {
+			ws.FinishLobby(lobby.wsLobby) // abort lobby on error
+		} else { // lobby finished properly
 			err = commitChanges(trainersClient, lobby)
 			if err != nil {
-				handleJoinConnError(err, conn)
-				return
+				ws.FinishLobby(lobby.wsLobby) // abort if commit fails
+			} else {
+				lobby.finish() // finish gracefully
+				log.Infof("closing lobby %s as expected", lobbyIdHex)
 			}
-			lobby.finish()
 		}
 		emitTradeFinish()
-		log.Infof("closing lobby %s as expected", lobbyIdHex)
-		ws.CloseLobbyConnections(lobby.wsLobby)
 		OngoingTrades.Delete(lobby.wsLobby.Id.Hex())
 	} else {
 		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
@@ -308,11 +307,13 @@ func cleanLobby(lobby *TradeLobby) {
 				MsgType: websocket.TextMessage,
 				Data:    []byte(ws.FinishMessage{Success: false}.SerializeToWSMessage().Serialize()),
 			}:
-				<-lobby.wsLobby.EndConnectionChannels[0]
+				select { // wait for proper finish of routine
+				case <-lobby.wsLobby.DoneListeningFromConn[0]:
+				case <-time.After(5 * time.Second):
+				}
 			}
 		}
-		lobby.finish()
-		ws.CloseLobbyConnections(lobby.wsLobby)
+		ws.FinishLobby(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.rejected:
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
@@ -321,11 +322,13 @@ func cleanLobby(lobby *TradeLobby) {
 				MsgType: websocket.TextMessage,
 				Data:    []byte(ws.RejectMessage{}.SerializeToWSMessage().Serialize()),
 			}:
-				<-lobby.wsLobby.EndConnectionChannels[0]
+				select { // wait for proper finish of routine
+				case <-lobby.wsLobby.DoneListeningFromConn[0]:
+				case <-time.After(5 * time.Second):
+				}
 			}
 		}
-		lobby.finish()
-		ws.CloseLobbyConnections(lobby.wsLobby)
+		ws.FinishLobby(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.wsLobby.Started:
 	}
@@ -343,16 +346,13 @@ func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) er
 	lobby.tokensLock.Lock()
 	err := tradeItems(trainersClient, trainer1Username, lobby.authTokens[0], items1, items2)
 	if err != nil {
-		lobby.tokensLock.Unlock()
-		return wrapCommitChangesError(err)
+		log.Panicln(wrapCommitChangesError(err))
 	}
 
 	lobby.sendTokenToUser(trainersClient, 0)
-
 	err = tradeItems(trainersClient, trainer2Username, lobby.authTokens[1], items2, items1)
 	if err != nil {
-		lobby.tokensLock.Unlock()
-		return wrapCommitChangesError(err)
+		log.Panicln(wrapCommitChangesError(err))
 	}
 	lobby.tokensLock.Unlock()
 	lobby.sendTokenToUser(trainersClient, 1)

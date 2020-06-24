@@ -3,8 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"sync"
-
 	"github.com/NOVAPokemon/utils/clients"
 	errors2 "github.com/NOVAPokemon/utils/clients/errors"
 	"github.com/NOVAPokemon/utils/items"
@@ -12,6 +10,8 @@ import (
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+	"sync"
+	"time"
 )
 
 type TradeLobby struct {
@@ -58,7 +58,6 @@ func (lobby *TradeLobby) StartTrade() error {
 	lobby.status = &trades.TradeStatus{
 		Players: players,
 	}
-
 	return lobby.tradeMainLoop()
 }
 
@@ -67,33 +66,35 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 	updateClients(ws.StartMessage{}.SerializeToWSMessage(), wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
 	ws.StartLobby(wsLobby)
 	emitTradeStart()
+
 	var (
 		trainerNum int
-		msgStr     *string
+		msg        string
+		ok         bool
 	)
 
 	for {
 		select {
-		case str, ok := <-wsLobby.TrainerInChannels[0]:
+		case msg, ok = <-wsLobby.TrainerInChannels[0]:
 			if !ok {
 				continue
 			}
 			trainerNum = 0
-			msgStr = str
-		case str, ok := <-wsLobby.TrainerInChannels[1]:
+		case msg, ok = <-wsLobby.TrainerInChannels[1]:
 			if !ok {
 				continue
 			}
 			trainerNum = 1
-			msgStr = str
-		case <-wsLobby.EndConnectionChannels[0]:
+		case <-wsLobby.DoneListeningFromConn[0]:
 			return errors.New("error during trade on user 0")
-		case <-wsLobby.EndConnectionChannels[1]:
+		case <-wsLobby.DoneListeningFromConn[1]:
+			return errors.New("error during trade on user 1")
+		case <-wsLobby.DoneWritingToConn[0]:
+			return errors.New("error during trade on user 0")
+		case <-wsLobby.DoneWritingToConn[1]:
 			return errors.New("error during trade on user 1")
 		}
-
-		lobby.handleChannelMessage(msgStr, lobby.status, trainerNum)
-
+		lobby.handleChannelMessage(msg, lobby.status, trainerNum)
 		if lobby.status.TradeFinished {
 			return nil
 		}
@@ -101,11 +102,24 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 }
 
 func (lobby *TradeLobby) finish() {
-	ws.FinishLobby(lobby.wsLobby)
 	finishMessage := ws.FinishMessage{Success: true}.SerializeToWSMessage()
 	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
-	<-lobby.wsLobby.EndConnectionChannels[0]
-	<-lobby.wsLobby.EndConnectionChannels[1]
+
+	wg := sync.WaitGroup{}
+	for i := 0; i < ws.GetTrainersJoined(lobby.wsLobby); i++ {
+		wg.Add(1)
+		trainerNr := i
+		go func() {
+			defer wg.Done()
+			select {
+			case <-lobby.wsLobby.DoneListeningFromConn[trainerNr]:
+			case <-time.After(3 * time.Second):
+			}
+		}()
+	}
+	wg.Wait()
+
+	ws.FinishLobby(lobby.wsLobby)
 }
 
 func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient, trainerNum int) {
@@ -114,8 +128,7 @@ func (lobby *TradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient,
 		lobby.wsLobby.TrainerOutChannels[trainerNum])
 }
 
-func (lobby *TradeLobby) handleChannelMessage(msgStr *string, status *trades.TradeStatus, trainerNum int) {
-
+func (lobby *TradeLobby) handleChannelMessage(msgStr string, status *trades.TradeStatus, trainerNum int) {
 	msg, err := ws.ParseMessage(msgStr)
 	var answerMsg *ws.Message
 	if err != nil {
