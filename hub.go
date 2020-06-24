@@ -224,16 +224,16 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 		if err := lobby.StartTrade(); err != nil {
 			ws.FinishLobby(lobby.wsLobby) // abort lobby on error
-		} else {
+		} else { // lobby finished properly
 			err = commitChanges(trainersClient, lobby)
 			if err != nil {
-				handleJoinConnError(err, conn)
-				return
+				ws.FinishLobby(lobby.wsLobby) // abort if commit fails
+			} else {
+				lobby.finish() // finish gracefully
+				log.Infof("closing lobby %s as expected", lobbyIdHex)
 			}
-			emitTradeFinish()
-			lobby.finish()
-			log.Infof("closing lobby %s as expected", lobbyIdHex)
 		}
+		emitTradeFinish()
 		OngoingTrades.Delete(lobby.wsLobby.Id.Hex())
 	} else {
 		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
@@ -346,15 +346,13 @@ func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) er
 	lobby.tokensLock.Lock()
 	err := tradeItems(trainersClient, trainer1Username, lobby.authTokens[0], items1, items2)
 	if err != nil {
-		lobby.tokensLock.Unlock()
-		return wrapCommitChangesError(err)
+		log.Panicln(wrapCommitChangesError(err))
 	}
 
 	lobby.sendTokenToUser(trainersClient, 0)
 	err = tradeItems(trainersClient, trainer2Username, lobby.authTokens[1], items2, items1)
 	if err != nil {
-		lobby.tokensLock.Unlock()
-		return wrapCommitChangesError(err)
+		log.Panicln(wrapCommitChangesError(err))
 	}
 	lobby.tokensLock.Unlock()
 	lobby.sendTokenToUser(trainersClient, 1)
