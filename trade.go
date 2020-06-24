@@ -107,8 +107,13 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 func (lobby *TradeLobby) finish() {
 	finishMessage := ws.FinishMessage{Success: true}.SerializeToWSMessage()
 	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
-	<-lobby.wsLobby.DoneListeningFromConn[0]
-	<-lobby.wsLobby.DoneListeningFromConn[1]
+
+	select {
+	case <-lobby.wsLobby.DoneListeningFromConn[0]:
+	case <-lobby.wsLobby.DoneListeningFromConn[1]:
+	case <-time.After(3 * time.Second):
+	}
+
 	ws.FinishLobby(lobby.wsLobby)
 }
 
