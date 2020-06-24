@@ -313,7 +313,7 @@ func cleanLobby(lobby *TradeLobby) {
 				}
 			}
 		}
-		lobby.finish()
+		ws.FinishLobby(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.rejected:
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
@@ -328,7 +328,7 @@ func cleanLobby(lobby *TradeLobby) {
 				}
 			}
 		}
-		lobby.finish()
+		ws.FinishLobby(lobby.wsLobby)
 		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.wsLobby.Started:
 	}
