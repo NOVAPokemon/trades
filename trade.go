@@ -3,9 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"sync"
-	"time"
-
 	"github.com/NOVAPokemon/utils/clients"
 	errors2 "github.com/NOVAPokemon/utils/clients/errors"
 	"github.com/NOVAPokemon/utils/items"
@@ -13,6 +10,8 @@ import (
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+	"sync"
+	"time"
 )
 
 type TradeLobby struct {
@@ -106,11 +105,19 @@ func (lobby *TradeLobby) finish() {
 	finishMessage := ws.FinishMessage{Success: true}.SerializeToWSMessage()
 	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
 
-	select {
-	case <-lobby.wsLobby.DoneListeningFromConn[0]:
-	case <-lobby.wsLobby.DoneListeningFromConn[1]:
-	case <-time.After(3 * time.Second):
+	wg := sync.WaitGroup{}
+	for i := 0; i < ws.GetTrainersJoined(lobby.wsLobby); i++ {
+		wg.Add(1)
+		trainerNr := i
+		go func() {
+			defer wg.Done()
+			select {
+			case <-lobby.wsLobby.DoneListeningFromConn[trainerNr]:
+			case <-time.After(3 * time.Second):
+			}
+		}()
 	}
+	wg.Wait()
 
 	ws.FinishLobby(lobby.wsLobby)
 }
