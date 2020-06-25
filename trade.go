@@ -3,6 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/NOVAPokemon/utils/clients"
 	errors2 "github.com/NOVAPokemon/utils/clients/errors"
 	"github.com/NOVAPokemon/utils/items"
@@ -10,8 +13,6 @@ import (
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"sync"
-	"time"
 )
 
 type TradeLobby struct {
