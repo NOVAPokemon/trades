@@ -95,7 +95,9 @@ func (lobby *TradeLobby) tradeMainLoop() error {
 		case <-wsLobby.DoneWritingToConn[1]:
 			return errors.New("error during trade on user 1")
 		}
+
 		lobby.handleChannelMessage(msg, lobby.status, trainerNum)
+
 		if lobby.status.TradeFinished {
 			return nil
 		}

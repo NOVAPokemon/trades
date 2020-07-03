@@ -24,7 +24,7 @@ import (
 )
 
 type (
-	keyType = string
+	keyType   = string
 	valueType = *TradeLobby
 )
 
@@ -331,13 +331,17 @@ func cleanLobby(lobby *TradeLobby) {
 	case <-lobby.rejected:
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
 			select {
-			case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
-				MsgType: websocket.TextMessage,
-				Data:    []byte(ws.RejectMessage{}.SerializeToWSMessage().Serialize()),
-			}:
-				select { // wait for proper finish of routine
-				case <-lobby.wsLobby.DoneListeningFromConn[0]:
-				case <-time.After(5 * time.Second):
+			case <-lobby.wsLobby.DoneListeningFromConn[0]:
+			default:
+				select {
+				case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
+					MsgType: websocket.TextMessage,
+					Data:    []byte(ws.RejectMessage{}.SerializeToWSMessage().Serialize()),
+				}:
+					select { // wait for proper finish of routine
+					case <-lobby.wsLobby.DoneListeningFromConn[0]:
+					case <-time.After(5 * time.Second):
+					}
 				}
 			}
 		}
