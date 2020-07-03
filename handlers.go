@@ -264,7 +264,7 @@ func HandleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
 		lobbyInterface, ok = WaitingTrades.Load(lobbyIdHex)
 		if !ok {
 			err = newTradeLobbyNotFoundError(lobbyIdHex)
-			utils.LogWarnAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusBadRequest)
+			utils.LogWarnAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusNotFound)
 			return
 		}
 	}
