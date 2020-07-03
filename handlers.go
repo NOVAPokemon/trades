@@ -177,7 +177,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	lobbyInterface, ok := WaitingTrades.Load(lobbyIdHex)
 	if !ok {
 		err = newTradeLobbyNotFoundError(lobbyIdHex)
-		handleJoinConnError(err, conn)
+		handleJoinWarning(err, conn)
 		return
 	}
 
@@ -264,7 +264,7 @@ func HandleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
 		lobbyInterface, ok = WaitingTrades.Load(lobbyIdHex)
 		if !ok {
 			err = newTradeLobbyNotFoundError(lobbyIdHex)
-			utils.LogAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusBadRequest)
+			utils.LogWarnAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusBadRequest)
 			return
 		}
 	}
@@ -284,6 +284,19 @@ func HandleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 func handleJoinConnError(err error, conn *websocket.Conn) {
 	log.Error(wrapJoinTradeError(err))
+
+	if conn == nil {
+		return
+	}
+
+	err = conn.Close()
+	if err != nil {
+		log.Error(wrapJoinTradeError(err))
+	}
+}
+
+func handleJoinWarning(err error, conn *websocket.Conn) {
+	log.Warn(wrapJoinTradeError(err))
 
 	if conn == nil {
 		return
