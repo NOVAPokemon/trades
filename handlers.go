@@ -19,6 +19,7 @@ import (
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -284,7 +285,11 @@ func handleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleJoinConnError(err error, conn *websocket.Conn) {
-	log.Error(wrapJoinTradeError(err))
+	if errors.Cause(err) == ws.ErrorLobbyAlreadyFinished {
+		log.Warn(wrapJoinTradeError(err))
+	} else {
+		log.Error(wrapJoinTradeError(err))
+	}
 
 	if conn == nil {
 		return
