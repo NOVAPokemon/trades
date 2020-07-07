@@ -8,38 +8,42 @@ import (
 	"github.com/NOVAPokemon/utils/api"
 )
 
-const GetLobbiesName = "GET_TRADE_LOBBIES"
-const CreateTradeName = "START_TRADE"
-const JoinTradeName = "JOIN_TRADE"
-const RejectTradeName = "REJECT_TRADE"
+const (
+	getLobbiesName  = "GET_TRADE_LOBBIES"
+	createTradeName = "START_TRADE"
+	joinTradeName   = "JOIN_TRADE"
+	rejectTradeName = "REJECT_TRADE"
+)
 
-const GET = "GET"
-const POST = "POST"
+const (
+	get  = "GET"
+	post = "POST"
+)
 
 var routes = utils.Routes{
 	api.GenStatusRoute(strings.ToLower(fmt.Sprintf("%s", serviceName))),
 	utils.Route{
-		Name:        GetLobbiesName,
-		Method:      GET,
+		Name:        getLobbiesName,
+		Method:      get,
 		Pattern:     api.GetTradesPath,
-		HandlerFunc: HandleGetLobbies,
+		HandlerFunc: handleGetLobbies,
 	},
 	utils.Route{
-		Name:        CreateTradeName,
-		Method:      POST,
+		Name:        createTradeName,
+		Method:      post,
 		Pattern:     api.StartTradePath,
-		HandlerFunc: HandleCreateTradeLobby,
+		HandlerFunc: handleCreateTradeLobby,
 	},
 	utils.Route{
-		Name:        JoinTradeName,
-		Method:      GET,
+		Name:        joinTradeName,
+		Method:      get,
 		Pattern:     api.JoinTradeRoute,
-		HandlerFunc: HandleJoinTradeLobby,
+		HandlerFunc: handleJoinTradeLobby,
 	},
 	utils.Route{
-		Name:        RejectTradeName,
-		Method:      POST,
+		Name:        rejectTradeName,
+		Method:      post,
 		Pattern:     api.RejectTradeRoute,
-		HandlerFunc: HandleRejectTradeLobby,
+		HandlerFunc: handleRejectTradeLobby,
 	},
 }

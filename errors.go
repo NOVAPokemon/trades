@@ -22,19 +22,19 @@ var (
 
 // Handler wrappers
 func wrapGetLobbiesError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, GetLobbiesName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, getLobbiesName))
 }
 
 func wrapCreateTradeError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, CreateTradeName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, createTradeName))
 }
 
 func wrapJoinTradeError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, JoinTradeName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, joinTradeName))
 }
 
 func wrapRejectTradeError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, RejectTradeName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, rejectTradeName))
 }
 
 // Other wrappers

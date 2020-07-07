@@ -25,7 +25,7 @@ import (
 
 type (
 	keyType   = string
-	valueType = *TradeLobby
+	valueType = *tradeLobby
 )
 
 const (
@@ -33,8 +33,8 @@ const (
 )
 
 var (
-	WaitingTrades = sync.Map{}
-	OngoingTrades = sync.Map{}
+	waitingTrades = sync.Map{}
+	ongoingTrades = sync.Map{}
 	httpClient    = &http.Client{}
 
 	serverName          string
@@ -57,7 +57,7 @@ func init() {
 	}
 }
 
-func HandleGetLobbies(w http.ResponseWriter, r *http.Request) {
+func handleGetLobbies(w http.ResponseWriter, r *http.Request) {
 	_, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapGetLobbiesError(err), http.StatusUnauthorized)
@@ -65,12 +65,13 @@ func HandleGetLobbies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var availableLobbies []utils.Lobby
-	WaitingTrades.Range(func(key, value interface{}) bool {
+	waitingTrades.Range(func(key, value interface{}) bool {
 		wsLobby := value.(valueType).wsLobby
 		select {
 		case <-wsLobby.Started:
 		default:
-			lobbyId, err := primitive.ObjectIDFromHex(key.(keyType))
+			var lobbyId primitive.ObjectID
+			lobbyId, err = primitive.ObjectIDFromHex(key.(keyType))
 			if err != nil {
 				return false
 			}
@@ -98,7 +99,7 @@ func HandleGetLobbies(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
+func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	var request api.CreateLobbyRequest
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
@@ -114,7 +115,7 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	lobbyId := primitive.NewObjectID()
 
-	lobby := TradeLobby{
+	lobby := tradeLobby{
 		expected:       [2]string{authClaims.Username, request.Username},
 		wsLobby:        ws.NewLobby(lobbyId, 2),
 		availableItems: [2]trades.ItemsMap{},
@@ -140,13 +141,13 @@ func HandleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WaitingTrades.Store(lobbyId.Hex(), &lobby)
+	waitingTrades.Store(lobbyId.Hex(), &lobby)
 	log.Info("created lobby ", lobbyId)
 
 	go cleanLobby(&lobby)
 }
 
-func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
+func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		err = ws.WrapUpgradeConnectionError(err)
@@ -174,7 +175,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lobbyInterface, ok := WaitingTrades.Load(lobbyIdHex)
+	lobbyInterface, ok := waitingTrades.Load(lobbyIdHex)
 	if !ok {
 		err = newTradeLobbyNotFoundError(lobbyIdHex)
 		handleJoinWarning(err, conn)
@@ -210,7 +211,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trainerNr, err := lobby.AddTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
+	trainerNr, err := lobby.addTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
 		r.Header.Get(tokens.AuthTokenHeaderName), conn)
 
 	if err != nil {
@@ -219,10 +220,10 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if trainerNr == 2 {
-		WaitingTrades.Delete(lobbyId.Hex())
-		OngoingTrades.Store(lobbyId.Hex(), lobby)
+		waitingTrades.Delete(lobbyId.Hex())
+		ongoingTrades.Store(lobbyId.Hex(), lobby)
 
-		if err := lobby.StartTrade(); err != nil {
+		if err = lobby.startTrade(); err != nil {
 			ws.FinishLobby(lobby.wsLobby) // abort lobby on error
 		} else { // lobby finished properly
 			err = commitChanges(trainersClient, lobby)
@@ -234,7 +235,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		emitTradeFinish()
-		OngoingTrades.Delete(lobby.wsLobby.Id.Hex())
+		ongoingTrades.Delete(lobby.wsLobby.Id.Hex())
 	} else {
 		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
 		if err != nil {
@@ -244,7 +245,7 @@ func HandleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func HandleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
+func handleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
 	authClaims, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusUnauthorized)
@@ -259,9 +260,9 @@ func HandleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var lobbyInterface interface{}
-	lobbyInterface, ok = OngoingTrades.Load(lobbyIdHex)
+	lobbyInterface, ok = ongoingTrades.Load(lobbyIdHex)
 	if !ok {
-		lobbyInterface, ok = WaitingTrades.Load(lobbyIdHex)
+		lobbyInterface, ok = waitingTrades.Load(lobbyIdHex)
 		if !ok {
 			err = newTradeLobbyNotFoundError(lobbyIdHex)
 			utils.LogWarnAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusNotFound)
@@ -308,7 +309,7 @@ func handleJoinWarning(err error, conn *websocket.Conn) {
 	}
 }
 
-func cleanLobby(lobby *TradeLobby) {
+func cleanLobby(lobby *tradeLobby) {
 	timer := time.NewTimer(tradeLobbyTimeout * time.Second)
 	defer timer.Stop()
 	select {
@@ -327,7 +328,7 @@ func cleanLobby(lobby *TradeLobby) {
 			}
 		}
 		ws.FinishLobby(lobby.wsLobby)
-		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
+		waitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.rejected:
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
 			select {
@@ -346,12 +347,12 @@ func cleanLobby(lobby *TradeLobby) {
 			}
 		}
 		ws.FinishLobby(lobby.wsLobby)
-		WaitingTrades.Delete(lobby.wsLobby.Id.Hex())
+		waitingTrades.Delete(lobby.wsLobby.Id.Hex())
 	case <-lobby.wsLobby.Started:
 	}
 }
 
-func commitChanges(trainersClient *clients.TrainersClient, lobby *TradeLobby) error {
+func commitChanges(trainersClient *clients.TrainersClient, lobby *tradeLobby) error {
 	trade := lobby.status
 
 	trainer1Username := lobby.expected[0]
