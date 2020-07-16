@@ -11,6 +11,7 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
+	"github.com/NOVAPokemon/utils/comms_manager"
 	"github.com/NOVAPokemon/utils/items"
 	"github.com/NOVAPokemon/utils/notifications"
 	"github.com/NOVAPokemon/utils/tokens"
@@ -40,8 +41,9 @@ var (
 
 	serverName          string
 	serviceNameHeadless string
+	commsManager        comms_manager.CommunicationManager
 
-	notificationsClient = clients.NewNotificationClient(nil)
+	notificationsClient *clients.NotificationClient
 )
 
 func init() {
@@ -199,7 +201,7 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	authToken := r.Header.Get(tokens.AuthTokenHeaderName)
 
-	trainersClient := clients.NewTrainersClient(httpClient)
+	trainersClient := clients.NewTrainersClient(httpClient, commsManager)
 	valid, err := trainersClient.VerifyItems(username, itemsClaims.ItemsHash, authToken)
 	if err != nil {
 		handleJoinConnError(err, conn)
@@ -213,7 +215,7 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	}
 
 	trainerNr, err := lobby.addTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
-		r.Header.Get(tokens.AuthTokenHeaderName), conn)
+		r.Header.Get(tokens.AuthTokenHeaderName), conn, commsManager)
 
 	if err != nil {
 		handleJoinConnError(err, conn)
@@ -322,10 +324,7 @@ func cleanLobby(lobby *tradeLobby) {
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
 			log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
 			select {
-			case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
-				MsgType: websocket.TextMessage,
-				Data:    []byte(ws.FinishMessage{Success: false}.SerializeToWSMessage().Serialize()),
-			}:
+			case lobby.wsLobby.TrainerOutChannels[0] <- ws.FinishMessage{Success: false}:
 				select { // wait for proper finish of routine
 				case <-lobby.wsLobby.DoneListeningFromConn[0]:
 				case <-time.After(5 * time.Second):
@@ -340,10 +339,7 @@ func cleanLobby(lobby *tradeLobby) {
 			case <-lobby.wsLobby.DoneListeningFromConn[0]:
 			default:
 				select {
-				case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
-					MsgType: websocket.TextMessage,
-					Data:    []byte(ws.RejectMessage{}.SerializeToWSMessage().Serialize()),
-				}:
+				case lobby.wsLobby.TrainerOutChannels[0] <- ws.RejectMessage{}:
 					select { // wait for proper finish of routine
 					case <-lobby.wsLobby.DoneListeningFromConn[0]:
 					case <-time.After(5 * time.Second):
