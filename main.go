@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/NOVAPokemon/utils"
+	"github.com/NOVAPokemon/utils/clients"
 	"github.com/gorilla/websocket"
 )
 
@@ -17,6 +18,20 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
-	utils.CheckLogFlag(serviceName)
-	utils.StartServer(serviceName, host, port, routes)
+	flags := utils.ParseFlags(serverName)
+
+	if !*flags.LogToStdout {
+		utils.SetLogFile(serverName)
+	}
+
+	if utils.CheckDelayedFlag(*flags.DelayedComms) {
+		commsManager = utils.CreateDefaultCommunicationManager()
+	} else {
+		locationTag := utils.GetLocationTag(utils.DefaultLocationTagsFilename, serverName)
+		commsManager = utils.CreateDelayedCommunicationManager(utils.DefaultDelayConfigFilename, locationTag)
+	}
+
+	notificationsClient = clients.NewNotificationClient(nil, commsManager)
+
+	utils.StartServer(serviceName, host, port, routes, commsManager)
 }
