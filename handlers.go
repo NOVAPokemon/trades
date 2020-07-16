@@ -323,7 +323,10 @@ func cleanLobby(lobby *tradeLobby) {
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
 			log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
 			select {
-			case lobby.wsLobby.TrainerOutChannels[0] <- ws.FinishMessage{Success: false}:
+			case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
+				MsgType: websocket.TextMessage,
+				Data:    []byte(ws.FinishMessage{Success: false}.SerializeToWSMessage().Serialize()),
+			}:
 				select { // wait for proper finish of routine
 				case <-lobby.wsLobby.DoneListeningFromConn[0]:
 				case <-time.After(5 * time.Second):
@@ -338,7 +341,10 @@ func cleanLobby(lobby *tradeLobby) {
 			case <-lobby.wsLobby.DoneListeningFromConn[0]:
 			default:
 				select {
-				case lobby.wsLobby.TrainerOutChannels[0] <- ws.RejectMessage{}:
+				case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
+					MsgType: websocket.TextMessage,
+					Data:    []byte(ws.RejectMessage{}.SerializeToWSMessage().Serialize()),
+				}:
 					select { // wait for proper finish of routine
 					case <-lobby.wsLobby.DoneListeningFromConn[0]:
 					case <-time.After(5 * time.Second):

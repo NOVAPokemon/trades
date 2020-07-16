@@ -64,8 +64,7 @@ func (lobby *tradeLobby) startTrade() error {
 
 func (lobby *tradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
-	updateClients(ws.StartMessage{}, wsLobby.TrainerOutChannels[0],
-		wsLobby.TrainerOutChannels[1])
+	updateClients(ws.StartMessage{}, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
 	ws.StartLobby(wsLobby)
 	emitTradeStart()
 
@@ -223,9 +222,12 @@ func (lobby *tradeLobby) handleAcceptMessage(message *ws.Message, trade *trades.
 	return trades.UpdateMessageFromTrade(trade, acceptMsg.TrackedMessage)
 }
 
-func updateClients(msg ws.Serializable, sendTo ...chan ws.Serializable) {
+func updateClients(msg ws.Serializable, sendTo ...chan ws.GenericMsg) {
 	for _, channel := range sendTo {
-		channel <- msg
+		channel <- ws.GenericMsg{
+			MsgType: websocket.TextMessage,
+			Data:    []byte(msg.SerializeToWSMessage().Serialize()),
+		}
 	}
 }
 
