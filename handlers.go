@@ -11,7 +11,6 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
-	"github.com/NOVAPokemon/utils/comms_manager"
 	"github.com/NOVAPokemon/utils/items"
 	"github.com/NOVAPokemon/utils/notifications"
 	"github.com/NOVAPokemon/utils/tokens"
@@ -41,7 +40,7 @@ var (
 
 	serverName          string
 	serviceNameHeadless string
-	commsManager        comms_manager.CommunicationManager
+	commsManager        utils.CommunicationManager
 
 	notificationsClient *clients.NotificationClient
 )
