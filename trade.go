@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/clients"
 	errors2 "github.com/NOVAPokemon/utils/clients/errors"
 	"github.com/NOVAPokemon/utils/items"
@@ -33,7 +32,7 @@ type tradeLobby struct {
 }
 
 func (lobby *tradeLobby) addTrainer(username string, items map[string]items.Item, itemsHash []byte,
-	authToken string, trainerConn *websocket.Conn, manager utils.CommunicationManager) (int, error) {
+	authToken string, trainerConn *websocket.Conn, manager ws.CommunicationManager) (int, error) {
 	trainersJoined, err := ws.AddTrainer(lobby.wsLobby, username, trainerConn, manager)
 	if err != nil {
 		return -1, errors2.WrapAddTrainerError(err)

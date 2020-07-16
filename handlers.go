@@ -40,7 +40,7 @@ var (
 
 	serverName          string
 	serviceNameHeadless string
-	commsManager        utils.CommunicationManager
+	commsManager        ws.CommunicationManager
 
 	notificationsClient *clients.NotificationClient
 )
