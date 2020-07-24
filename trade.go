@@ -166,7 +166,7 @@ func (lobby *tradeLobby) handleMessage(wsMsg *ws.WebsocketMsg, status *trades.Tr
 	}
 }
 
-func (lobby *tradeLobby) handleTradeMessage(trackInfo ws.TrackedInfo, tradeMsg *trades.TradeMessage,
+func (lobby *tradeLobby) handleTradeMessage(trackInfo *ws.TrackedInfo, tradeMsg *trades.TradeMessage,
 	trade *trades.TradeStatus, trainerNum int) *ws.WebsocketMsg {
 	itemId := tradeMsg.ItemId
 
@@ -191,10 +191,10 @@ func (lobby *tradeLobby) handleTradeMessage(trackInfo ws.TrackedInfo, tradeMsg *
 	}
 
 	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, item)
-	return trades.UpdateMessageFromTrade(trade).ConvertToWSMessage(trackInfo)
+	return trades.UpdateMessageFromTrade(trade).ConvertToWSMessage(*trackInfo)
 }
 
-func (lobby *tradeLobby) handleAcceptMessage(trackInfo ws.TrackedInfo, trade *trades.TradeStatus,
+func (lobby *tradeLobby) handleAcceptMessage(trackInfo *ws.TrackedInfo, trade *trades.TradeStatus,
 	trainerNum int) *ws.WebsocketMsg {
 	trade.Players[trainerNum].Accepted = true
 
@@ -202,7 +202,7 @@ func (lobby *tradeLobby) handleAcceptMessage(trackInfo ws.TrackedInfo, trade *tr
 		trade.TradeFinished = true
 	}
 
-	return trades.UpdateMessageFromTrade(trade).ConvertToWSMessage(trackInfo)
+	return trades.UpdateMessageFromTrade(trade).ConvertToWSMessage(*trackInfo)
 }
 
 func updateClients(msg *ws.WebsocketMsg, sendTo ...chan *ws.WebsocketMsg) {
