@@ -12,13 +12,13 @@ import (
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/websocket"
-	log "github.com/sirupsen/logrus"
 )
 
 type tradeLobby struct {
-	expected [2]string
-	wsLobby  *ws.Lobby
-	status   *trades.TradeStatus
+	createdTrackInfo ws.TrackedInfo
+	expected         [2]string
+	wsLobby          *ws.Lobby
+	status           *trades.TradeStatus
 
 	availableItems [2]trades.ItemsMap
 	itemsLock      sync.Mutex
@@ -64,13 +64,14 @@ func (lobby *tradeLobby) startTrade() error {
 
 func (lobby *tradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
-	updateClients(ws.StartMessage{}, wsLobby.TrainerOutChannels[0], wsLobby.TrainerOutChannels[1])
+	updateClients(ws.StartMessage{}.ConvertToWSMessageWithInfo(lobby.createdTrackInfo), wsLobby.TrainerOutChannels[0],
+		wsLobby.TrainerOutChannels[1])
 	ws.StartLobby(wsLobby)
 	emitTradeStart()
 
 	var (
 		trainerNum int
-		msg        string
+		msg        *ws.WebsocketMsg
 		ok         bool
 	)
 
@@ -105,8 +106,9 @@ func (lobby *tradeLobby) tradeMainLoop() error {
 }
 
 func (lobby *tradeLobby) finish() {
-	finishMessage := ws.FinishMessage{Success: true}
-	updateClients(finishMessage, lobby.wsLobby.TrainerOutChannels[0], lobby.wsLobby.TrainerOutChannels[1])
+	finishMessageConverted := ws.FinishMessage{Success: true}.ConvertToWSMessage()
+	lobby.wsLobby.TrainerOutChannels[0] <- finishMessageConverted
+	lobby.wsLobby.TrainerOutChannels[1] <- finishMessageConverted
 
 	wg := sync.WaitGroup{}
 	for i := 0; i < ws.GetTrainersJoined(lobby.wsLobby); i++ {
@@ -126,25 +128,18 @@ func (lobby *tradeLobby) finish() {
 }
 
 func (lobby *tradeLobby) sendTokenToUser(trainersClient *clients.TrainersClient, trainerNum int) {
-	updateClients(
-		ws.SetTokenMessage{TokensString: []string{trainersClient.ItemsToken}},
-		lobby.wsLobby.TrainerOutChannels[trainerNum])
+	setTokenMsg := ws.SetTokenMessage{TokensString: []string{trainersClient.ItemsToken}}
+	updateClients(setTokenMsg.ConvertToWSMessage(), lobby.wsLobby.TrainerOutChannels[trainerNum])
 }
 
-func (lobby *tradeLobby) handleChannelMessage(msgStr string, status *trades.TradeStatus, trainerNum int) {
-	msg, err := ws.ParseMessage(msgStr)
-	var answerMsg ws.Serializable
-	if err != nil {
-		answerMsg = trades.ErrorParsing
-	} else {
-		answerMsg = lobby.handleMessage(msg, status, trainerNum)
-	}
+func (lobby *tradeLobby) handleChannelMessage(wsMsg *ws.WebsocketMsg, status *trades.TradeStatus, trainerNum int) {
+	answerMsg := lobby.handleMessage(wsMsg, status, trainerNum)
 
 	if answerMsg == nil {
 		return
 	}
 
-	switch answerMsg.SerializeToWSMessage().MsgType {
+	switch answerMsg.Content.AppMsgType {
 	case ws.Error:
 		updateClients(answerMsg, lobby.wsLobby.TrainerOutChannels[trainerNum])
 	case trades.Update:
@@ -152,32 +147,27 @@ func (lobby *tradeLobby) handleChannelMessage(msgStr string, status *trades.Trad
 	}
 }
 
-func (lobby *tradeLobby) handleMessage(message *ws.Message, status *trades.TradeStatus,
-	trainerNum int) ws.Serializable {
+func (lobby *tradeLobby) handleMessage(wsMsg *ws.WebsocketMsg, status *trades.TradeStatus,
+	trainerNum int) *ws.WebsocketMsg {
+	content := wsMsg.Content
+	msgData := wsMsg.Content.Data
 
-	switch message.MsgType {
+	switch wsMsg.Content.AppMsgType {
 	case trades.Trade:
-		return lobby.handleTradeMessage(message, status, trainerNum)
+		tradeMsg := msgData.(trades.TradeMessage)
+		return lobby.handleTradeMessage(content.RequestTrack, &tradeMsg, status, trainerNum)
 	case trades.Accept:
-		return lobby.handleAcceptMessage(message, status, trainerNum)
+		return lobby.handleAcceptMessage(content.RequestTrack, status, trainerNum)
 	default:
 		return ws.ErrorMessage{
-			Info:  fmt.Sprintf("invalid msg type %s", message.MsgType),
+			Info:  fmt.Sprintf("invalid msg type %s", content.AppMsgType),
 			Fatal: false,
-		}
+		}.ConvertToWSMessage()
 	}
 }
 
-func (lobby *tradeLobby) handleTradeMessage(message *ws.Message, trade *trades.TradeStatus,
-	trainerNum int) ws.Serializable {
-	desMsg, err := trades.DeserializeTradeMessage(message)
-	if err != nil {
-		log.Error(err)
-		return nil
-	}
-
-	tradeMsg := desMsg.(*trades.TradeMessage)
-
+func (lobby *tradeLobby) handleTradeMessage(trackInfo ws.TrackedInfo, tradeMsg *trades.TradeMessage,
+	trade *trades.TradeStatus, trainerNum int) *ws.WebsocketMsg {
 	itemId := tradeMsg.ItemId
 
 	lobby.itemsLock.Lock()
@@ -188,46 +178,36 @@ func (lobby *tradeLobby) handleTradeMessage(message *ws.Message, trade *trades.T
 		return ws.ErrorMessage{
 			Info:  fmt.Sprintf("you dont have %s", itemId),
 			Fatal: false,
-		}
+		}.ConvertToWSMessageWithInfo(trackInfo)
 	} else {
 		for _, itemAdded := range trade.Players[trainerNum].Items {
 			if itemAdded.Id.Hex() == itemId {
 				return ws.ErrorMessage{
 					Info:  fmt.Sprintf("you already added %s", itemId),
 					Fatal: false,
-				}
+				}.ConvertToWSMessageWithInfo(trackInfo)
 			}
 		}
 	}
 
 	trade.Players[trainerNum].Items = append(trade.Players[trainerNum].Items, item)
-	return trades.UpdateMessageFromTrade(trade, tradeMsg.TrackedMessage)
+	return trades.UpdateMessageFromTrade(trade).ConvertToWSMessage(trackInfo)
 }
 
-func (lobby *tradeLobby) handleAcceptMessage(message *ws.Message, trade *trades.TradeStatus,
-	trainerNum int) ws.Serializable {
-	desMsg, err := trades.DeserializeTradeMessage(message)
-	if err != nil {
-		log.Error(err)
-		return nil
-	}
-
-	acceptMsg := desMsg.(*trades.AcceptMessage)
+func (lobby *tradeLobby) handleAcceptMessage(trackInfo ws.TrackedInfo, trade *trades.TradeStatus,
+	trainerNum int) *ws.WebsocketMsg {
 	trade.Players[trainerNum].Accepted = true
 
 	if checkIfTradeFinished(trade) {
 		trade.TradeFinished = true
 	}
 
-	return trades.UpdateMessageFromTrade(trade, acceptMsg.TrackedMessage)
+	return trades.UpdateMessageFromTrade(trade).ConvertToWSMessage(trackInfo)
 }
 
-func updateClients(msg ws.Serializable, sendTo ...chan ws.GenericMsg) {
+func updateClients(msg *ws.WebsocketMsg, sendTo ...chan *ws.WebsocketMsg) {
 	for _, channel := range sendTo {
-		channel <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data:    []byte(msg.SerializeToWSMessage().Serialize()),
-		}
+		channel <- msg
 	}
 }
 

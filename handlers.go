@@ -115,15 +115,18 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	trackedInfo := ws.GetTrackInfoFromHeader(&r.Header)
+
 	lobbyId := primitive.NewObjectID()
 
 	lobby := tradeLobby{
-		expected:       [2]string{authClaims.Username, request.Username},
-		wsLobby:        ws.NewLobby(lobbyId, 2),
-		availableItems: [2]trades.ItemsMap{},
-		initialHashes:  [2][]byte{},
-		rejected:       make(chan struct{}),
-		itemsLock:      sync.Mutex{},
+		createdTrackInfo: trackedInfo,
+		expected:         [2]string{authClaims.Username, request.Username},
+		wsLobby:          ws.NewLobby(lobbyId, 2),
+		availableItems:   [2]trades.ItemsMap{},
+		initialHashes:    [2][]byte{},
+		rejected:         make(chan struct{}),
+		itemsLock:        sync.Mutex{},
 	}
 
 	resp := api.CreateLobbyResponse{
@@ -146,7 +149,7 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	waitingTrades.Store(lobbyId.Hex(), &lobby)
 	log.Info("created lobby ", lobbyId)
 
-	go cleanLobby(&lobby)
+	go cleanLobby(trackedInfo, &lobby)
 }
 
 func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
@@ -225,7 +228,8 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		waitingTrades.Delete(lobbyId.Hex())
 		ongoingTrades.Store(lobbyId.Hex(), lobby)
 
-		if err = lobby.startTrade(); err != nil {
+		err = lobby.startTrade()
+		if err != nil {
 			ws.FinishLobby(lobby.wsLobby) // abort lobby on error
 		} else { // lobby finished properly
 			err = commitChanges(trainersClient, lobby)
@@ -315,7 +319,7 @@ func handleJoinWarning(err error, conn *websocket.Conn) {
 	}
 }
 
-func cleanLobby(lobby *tradeLobby) {
+func cleanLobby(createdTrackInfo ws.TrackedInfo, lobby *tradeLobby) {
 	timer := time.NewTimer(tradeLobbyTimeout * time.Second)
 	defer timer.Stop()
 	select {
@@ -323,10 +327,7 @@ func cleanLobby(lobby *tradeLobby) {
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
 			log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
 			select {
-			case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
-				MsgType: websocket.TextMessage,
-				Data:    []byte(ws.FinishMessage{Success: false}.SerializeToWSMessage().Serialize()),
-			}:
+			case lobby.wsLobby.TrainerOutChannels[0] <- ws.FinishMessage{Success: false}.ConvertToWSMessage():
 				select { // wait for proper finish of routine
 				case <-lobby.wsLobby.DoneListeningFromConn[0]:
 				case <-time.After(5 * time.Second):
@@ -341,10 +342,7 @@ func cleanLobby(lobby *tradeLobby) {
 			case <-lobby.wsLobby.DoneListeningFromConn[0]:
 			default:
 				select {
-				case lobby.wsLobby.TrainerOutChannels[0] <- ws.GenericMsg{
-					MsgType: websocket.TextMessage,
-					Data:    []byte(ws.RejectMessage{}.SerializeToWSMessage().Serialize()),
-				}:
+				case lobby.wsLobby.TrainerOutChannels[0] <- ws.RejectMessage{}.ConvertToWSMessage(createdTrackInfo):
 					select { // wait for proper finish of routine
 					case <-lobby.wsLobby.DoneListeningFromConn[0]:
 					case <-time.After(5 * time.Second):
@@ -434,9 +432,9 @@ func postNotification(sender, receiver, lobbyId string, authToken string) error 
 		Content:  contentBytes,
 	}
 
-	notificationMsg := notificationMessages.NewNotificationMessage(notification)
-	notificationMsg.Emit(ws.MakeTimestamp())
-	notificationMsg.LogEmit(notificationMessages.Notification)
+	notificationMsg := notificationMessages.NotificationMessage{
+		Notification: notification,
+	}
 
 	err = notificationsClient.AddNotification(&notificationMsg, authToken)
 
