@@ -16,7 +16,6 @@ import (
 )
 
 type tradeLobby struct {
-	createdTrackInfo ws.TrackedInfo
 	expected         [2]string
 	wsLobby          *ws.Lobby
 	status           *trades.TradeStatus
@@ -65,7 +64,8 @@ func (lobby *tradeLobby) startTrade() error {
 
 func (lobby *tradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
-	updateClients(trades.StartTradeMessage{}.ConvertToWSMessage(lobby.createdTrackInfo), wsLobby.TrainerOutChannels[0],
+	updateClients(trades.StartTradeMessage{}.ConvertToWSMessage(*lobby.wsLobby.StartTrackInfo),
+	wsLobby.TrainerOutChannels[0],
 		wsLobby.TrainerOutChannels[1])
 	ws.StartLobby(wsLobby)
 	emitTradeStart()
