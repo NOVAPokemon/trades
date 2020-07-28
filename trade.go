@@ -65,7 +65,7 @@ func (lobby *tradeLobby) startTrade() error {
 
 func (lobby *tradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
-	updateClients(ws.StartMessage{}.ConvertToWSMessageWithInfo(lobby.createdTrackInfo), wsLobby.TrainerOutChannels[0],
+	updateClients(trades.StartTradeMessage{}.ConvertToWSMessage(lobby.createdTrackInfo), wsLobby.TrainerOutChannels[0],
 		wsLobby.TrainerOutChannels[1])
 	ws.StartLobby(wsLobby)
 	emitTradeStart()
@@ -178,17 +178,17 @@ func (lobby *tradeLobby) handleTradeMessage(trackInfo *ws.TrackedInfo, tradeMsg 
 	lobby.itemsLock.Unlock()
 
 	if !ok {
-		return ws.ErrorMessage{
+		return trades.ErrorTradeMessage{
 			Info:  fmt.Sprintf("you dont have %s", itemId),
 			Fatal: false,
-		}.ConvertToWSMessageWithInfo(trackInfo)
+		}.ConvertToWSMessage(*trackInfo)
 	} else {
 		for _, itemAdded := range trade.Players[trainerNum].Items {
 			if itemAdded.Id == itemId {
-				return ws.ErrorMessage{
+				return trades.ErrorTradeMessage{
 					Info:  fmt.Sprintf("you already added %s", itemId),
 					Fatal: false,
-				}.ConvertToWSMessageWithInfo(trackInfo)
+				}.ConvertToWSMessage(*trackInfo)
 			}
 		}
 	}

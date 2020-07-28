@@ -335,7 +335,8 @@ func cleanLobby(createdTrackInfo ws.TrackedInfo, lobby *tradeLobby) {
 			case <-lobby.wsLobby.DoneListeningFromConn[0]:
 			default:
 				select {
-				case lobby.wsLobby.TrainerOutChannels[0] <- ws.RejectMessage{}.ConvertToWSMessage(createdTrackInfo):
+				case lobby.wsLobby.TrainerOutChannels[0] <- trades.RejectTradeMessage{}.
+					ConvertToWSMessage(createdTrackInfo):
 					select { // wait for proper finish of routine
 					case <-lobby.wsLobby.DoneListeningFromConn[0]:
 					case <-time.After(5 * time.Second):
