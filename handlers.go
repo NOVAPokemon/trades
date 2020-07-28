@@ -113,9 +113,8 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	lobbyId := primitive.NewObjectID()
 
 	lobby := tradeLobby{
-		createdTrackInfo: trackedInfo,
 		expected:         [2]string{authClaims.Username, request.Username},
-		wsLobby:          ws.NewLobby(lobbyId.Hex(), 2),
+		wsLobby:          ws.NewLobby(lobbyId.Hex(), 2, &trackedInfo),
 		availableItems:   [2]trades.ItemsMap{},
 		initialHashes:    [2]string{},
 		rejected:         make(chan struct{}),
