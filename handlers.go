@@ -429,7 +429,7 @@ func postNotification(sender, receiver, lobbyId string, authToken string) error 
 	notification := utils.Notification{
 		Username: receiver,
 		Type:     notifications.WantsToTrade,
-		Content:  contentBytes,
+		Content:  string(contentBytes),
 	}
 
 	notificationMsg := notificationMessages.NotificationMessage{
