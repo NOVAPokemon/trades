@@ -379,7 +379,7 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 	toRemove, toAdd []items.Item) error {
 	toRemoveIds := make([]string, len(toRemove))
 	for i, item := range toRemove {
-		toRemoveIds[i] = item.Id.Hex()
+		toRemoveIds[i] = item.Id
 	}
 
 	if len(toRemove) > 0 {

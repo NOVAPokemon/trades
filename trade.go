@@ -184,7 +184,7 @@ func (lobby *tradeLobby) handleTradeMessage(trackInfo *ws.TrackedInfo, tradeMsg 
 		}.ConvertToWSMessageWithInfo(trackInfo)
 	} else {
 		for _, itemAdded := range trade.Players[trainerNum].Items {
-			if itemAdded.Id.Hex() == itemId {
+			if itemAdded.Id == itemId {
 				return ws.ErrorMessage{
 					Info:  fmt.Sprintf("you already added %s", itemId),
 					Fatal: false,
