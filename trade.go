@@ -24,7 +24,7 @@ type tradeLobby struct {
 	availableItems [2]trades.ItemsMap
 	itemsLock      sync.Mutex
 
-	initialHashes [2][]byte
+	initialHashes [2]string
 
 	authTokens [2]string
 	tokensLock sync.Mutex
@@ -32,7 +32,7 @@ type tradeLobby struct {
 	rejected chan struct{}
 }
 
-func (lobby *tradeLobby) addTrainer(username string, items map[string]items.Item, itemsHash []byte,
+func (lobby *tradeLobby) addTrainer(username string, items map[string]items.Item, itemsHash string,
 	authToken string, trainerConn *websocket.Conn, manager ws.CommunicationManager) (int, error) {
 	trainersJoined, err := ws.AddTrainer(lobby.wsLobby, username, trainerConn, manager)
 	if err != nil {

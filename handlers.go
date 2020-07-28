@@ -72,14 +72,8 @@ func handleGetLobbies(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-wsLobby.Started:
 		default:
-			var lobbyId primitive.ObjectID
-			lobbyId, err = primitive.ObjectIDFromHex(key.(keyType))
-			if err != nil {
-				return false
-			}
-
 			availableLobbies = append(availableLobbies, utils.Lobby{
-				Id:       lobbyId,
+				Id:       wsLobby.Id,
 				Username: wsLobby.TrainerUsernames[0],
 			})
 		}
@@ -122,9 +116,9 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	lobby := tradeLobby{
 		createdTrackInfo: trackedInfo,
 		expected:         [2]string{authClaims.Username, request.Username},
-		wsLobby:          ws.NewLobby(lobbyId, 2),
+		wsLobby:          ws.NewLobby(lobbyId.Hex(), 2),
 		availableItems:   [2]trades.ItemsMap{},
-		initialHashes:    [2][]byte{},
+		initialHashes:    [2]string{},
 		rejected:         make(chan struct{}),
 		itemsLock:        sync.Mutex{},
 	}
@@ -241,7 +235,7 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		emitTradeFinish()
-		ongoingTrades.Delete(lobby.wsLobby.Id.Hex())
+		ongoingTrades.Delete(lobby.wsLobby.Id)
 	} else {
 		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
 		if err != nil {
@@ -325,7 +319,7 @@ func cleanLobby(createdTrackInfo ws.TrackedInfo, lobby *tradeLobby) {
 	select {
 	case <-timer.C:
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
-			log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id.Hex())
+			log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id)
 			select {
 			case lobby.wsLobby.TrainerOutChannels[0] <- ws.FinishMessage{Success: false}.ConvertToWSMessage():
 				select { // wait for proper finish of routine
@@ -335,7 +329,7 @@ func cleanLobby(createdTrackInfo ws.TrackedInfo, lobby *tradeLobby) {
 			}
 		}
 		ws.FinishLobby(lobby.wsLobby)
-		waitingTrades.Delete(lobby.wsLobby.Id.Hex())
+		waitingTrades.Delete(lobby.wsLobby.Id)
 	case <-lobby.rejected:
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
 			select {
@@ -351,7 +345,7 @@ func cleanLobby(createdTrackInfo ws.TrackedInfo, lobby *tradeLobby) {
 			}
 		}
 		ws.FinishLobby(lobby.wsLobby)
-		waitingTrades.Delete(lobby.wsLobby.Id.Hex())
+		waitingTrades.Delete(lobby.wsLobby.Id)
 	case <-lobby.wsLobby.Started:
 	}
 }
