@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/mitchellh/mapstructure"
 	"sync"
 	"time"
 
@@ -151,11 +152,13 @@ func (lobby *tradeLobby) handleMessage(wsMsg *ws.WebsocketMsg, status *trades.Tr
 	trainerNum int) *ws.WebsocketMsg {
 	content := wsMsg.Content
 	msgData := wsMsg.Content.Data
-
 	switch wsMsg.Content.AppMsgType {
 	case trades.Trade:
-		tradeMsg := msgData.(trades.TradeMessage)
-		return lobby.handleTradeMessage(content.RequestTrack, &tradeMsg, status, trainerNum)
+		tradeMsg := &trades.TradeMessage{}
+		if err := mapstructure.Decode(msgData, tradeMsg); err != nil {
+			panic(err)
+		}
+		return lobby.handleTradeMessage(content.RequestTrack, tradeMsg, status, trainerNum)
 	case trades.Accept:
 		return lobby.handleAcceptMessage(content.RequestTrack, status, trainerNum)
 	default:
