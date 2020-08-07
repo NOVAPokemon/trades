@@ -3,10 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
+	originalHttp "net/http"
 	"os"
 	"sync"
 	"time"
+
+	http "github.com/bruno-anjos/archimedesHTTPClient"
 
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
@@ -58,7 +60,7 @@ func init() {
 	}
 }
 
-func handleGetLobbies(w http.ResponseWriter, r *http.Request) {
+func handleGetLobbies(w originalHttp.ResponseWriter, r *originalHttp.Request) {
 	_, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapGetLobbiesError(err), http.StatusUnauthorized)
@@ -94,7 +96,7 @@ func handleGetLobbies(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
+func handleCreateTradeLobby(w originalHttp.ResponseWriter, r *originalHttp.Request) {
 	var request api.CreateLobbyRequest
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
@@ -113,12 +115,12 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	lobbyId := primitive.NewObjectID()
 
 	lobby := tradeLobby{
-		expected:         [2]string{authClaims.Username, request.Username},
-		wsLobby:          ws.NewLobby(lobbyId.Hex(), 2, &trackedInfo),
-		availableItems:   [2]trades.ItemsMap{},
-		initialHashes:    [2]string{},
-		rejected:         make(chan struct{}),
-		itemsLock:        sync.Mutex{},
+		expected:       [2]string{authClaims.Username, request.Username},
+		wsLobby:        ws.NewLobby(lobbyId.Hex(), 2, &trackedInfo),
+		availableItems: [2]trades.ItemsMap{},
+		initialHashes:  [2]string{},
+		rejected:       make(chan struct{}),
+		itemsLock:      sync.Mutex{},
 	}
 
 	resp := api.CreateLobbyResponse{
@@ -144,7 +146,7 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	go cleanLobby(trackedInfo, &lobby)
 }
 
-func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
+func handleJoinTradeLobby(w originalHttp.ResponseWriter, r *originalHttp.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		err = ws.WrapUpgradeConnectionError(err)
@@ -243,7 +245,7 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
+func handleRejectTradeLobby(w originalHttp.ResponseWriter, r *originalHttp.Request) {
 	authClaims, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusUnauthorized)
