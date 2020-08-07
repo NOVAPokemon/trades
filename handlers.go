@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	originalHttp "net/http"
 	"os"
 	"sync"
 	"time"
@@ -60,7 +59,7 @@ func init() {
 	}
 }
 
-func handleGetLobbies(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleGetLobbies(w http.ResponseWriter, r *http.Request) {
 	_, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapGetLobbiesError(err), http.StatusUnauthorized)
@@ -96,7 +95,7 @@ func handleGetLobbies(w originalHttp.ResponseWriter, r *originalHttp.Request) {
 	}
 }
 
-func handleCreateTradeLobby(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	var request api.CreateLobbyRequest
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
@@ -146,7 +145,7 @@ func handleCreateTradeLobby(w originalHttp.ResponseWriter, r *originalHttp.Reque
 	go cleanLobby(trackedInfo, &lobby)
 }
 
-func handleJoinTradeLobby(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		err = ws.WrapUpgradeConnectionError(err)
@@ -245,7 +244,7 @@ func handleJoinTradeLobby(w originalHttp.ResponseWriter, r *originalHttp.Request
 	}
 }
 
-func handleRejectTradeLobby(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
 	authClaims, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapRejectTradeError(err), http.StatusUnauthorized)
