@@ -1,9 +1,14 @@
 package main
 
 import (
+	"os"
+
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/clients"
+	http "github.com/bruno-anjos/archimedesHTTPClient"
+	"github.com/golang/geo/s2"
 	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -31,7 +36,14 @@ func main() {
 		commsManager = utils.CreateDefaultDelayedManager(locationTag, false)
 	}
 
-	notificationsClient = clients.NewNotificationClient(nil, commsManager)
+	location, exists := os.LookupEnv("LOCATION")
+	if !exists {
+		log.Fatalf("no location in environment")
+	}
+
+	httpClient.InitArchimedesClient("localhost", http.DefaultArchimedesPort, s2.CellIDFromToken(location).LatLng())
+
+	notificationsClient = clients.NewNotificationClient(nil, commsManager, httpClient)
 
 	utils.StartServer(serviceName, host, port, routes, commsManager)
 }
