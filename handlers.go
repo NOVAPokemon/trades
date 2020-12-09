@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"sync"
 	"time"
 
 	http "github.com/bruno-anjos/archimedesHTTPClient"
+	cedUtils "github.com/bruno-anjos/cloud-edge-deployment/pkg/utils"
 
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
@@ -38,9 +38,9 @@ var (
 	ongoingTrades = sync.Map{}
 	httpClient    = &http.Client{}
 
-	serverName          string
-	serviceNameHeadless string
-	commsManager        ws.CommunicationManager
+	serverName   string
+	instanceName string
+	commsManager ws.CommunicationManager
 
 	notificationsClient *clients.NotificationClient
 )
@@ -52,10 +52,10 @@ func init() {
 		log.Fatal("Could not load server name")
 	}
 
-	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
-		serviceNameHeadless = aux
+	if aux, exists := os.LookupEnv(cedUtils.InstanceEnvVarName); exists {
+		instanceName = aux
 	} else {
-		log.Fatal("Could not load headless service name")
+		log.Fatal("Could not load instance name")
 	}
 }
 
@@ -124,7 +124,7 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	resp := api.CreateLobbyResponse{
 		LobbyId:    lobbyId.Hex(),
-		ServerName: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
+		ServerName: instanceName,
 	}
 	respBytes, err := json.Marshal(resp)
 	if err != nil {
@@ -411,7 +411,7 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 func postNotification(sender, receiver, lobbyId string, authToken string) error {
 	toMarshal := notifications.WantsToTradeContent{Username: sender,
 		LobbyId:        lobbyId,
-		ServerHostname: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
+		ServerHostname: instanceName,
 	}
 
 	contentBytes, err := json.Marshal(toMarshal)

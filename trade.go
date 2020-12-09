@@ -3,9 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"sync"
 	"time"
+
+	"github.com/mitchellh/mapstructure"
 
 	"github.com/NOVAPokemon/utils/clients"
 	errors2 "github.com/NOVAPokemon/utils/clients/errors"
