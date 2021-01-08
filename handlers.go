@@ -23,6 +23,10 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"fmt"
+	"github.com/docker/go-connections/nat"
+	"strconv"
+	originalHTTP "net/http"
 )
 
 type (
@@ -36,10 +40,10 @@ const (
 var (
 	waitingTrades = sync.Map{}
 	ongoingTrades = sync.Map{}
-	httpClient    = &http.Client{}
+	httpClient    = &http.Client{Client: originalHTTP.Client{Timeout: clients.RequestTimeout}}
 
 	serverName   string
-	instanceName string
+	externalAddr string
 	commsManager ws.CommunicationManager
 
 	notificationsClient *clients.NotificationClient
@@ -51,12 +55,24 @@ func init() {
 	} else {
 		log.Fatal("Could not load server name")
 	}
-
-	if aux, exists := os.LookupEnv(cedUtils.InstanceEnvVarName); exists {
-		instanceName = aux
-	} else {
-		log.Fatal("Could not load instance name")
+	
+	nodeIP, ok := os.LookupEnv(cedUtils.NodeIPEnvVarName)
+	if !ok {
+		log.Fatal("Could not load node ip")
 	}
+
+	portMapping := cedUtils.GetPortMapFromEnvVar()
+
+	servicePortString, err := nat.NewPort("tcp", strconv.Itoa(utils.TradesPort))
+	if err != nil {
+		log.Panic(err)
+	}
+
+	externalPortString := portMapping[servicePortString][0].HostPort
+
+	externalAddr = fmt.Sprintf("%s:%d", nodeIP, nat.Port(externalPortString).Int())
+
+	log.Infof("External addr: %s", externalAddr)
 }
 
 func handleGetLobbies(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +140,7 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	resp := api.CreateLobbyResponse{
 		LobbyId:    lobbyId.Hex(),
-		ServerName: instanceName,
+		ServerName: externalAddr,
 	}
 	respBytes, err := json.Marshal(resp)
 	if err != nil {
@@ -409,9 +425,11 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 }
 
 func postNotification(sender, receiver, lobbyId string, authToken string) error {
-	toMarshal := notifications.WantsToTradeContent{Username: sender,
+
+	toMarshal := notifications.WantsToTradeContent{
+		Username:       sender,
 		LobbyId:        lobbyId,
-		ServerHostname: instanceName,
+		ServerHostname: externalAddr,
 	}
 
 	contentBytes, err := json.Marshal(toMarshal)
