@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -18,14 +20,12 @@ import (
 	ws "github.com/NOVAPokemon/utils/websockets"
 	notificationMessages "github.com/NOVAPokemon/utils/websockets/notifications"
 	"github.com/NOVAPokemon/utils/websockets/trades"
+	"github.com/docker/go-connections/nat"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"fmt"
-	"github.com/docker/go-connections/nat"
-	"strconv"
 	originalHTTP "net/http"
 )
 
@@ -55,7 +55,7 @@ func init() {
 	} else {
 		log.Fatal("Could not load server name")
 	}
-	
+
 	nodeIP, ok := os.LookupEnv(cedUtils.NodeIPEnvVarName)
 	if !ok {
 		log.Fatal("Could not load node ip")
@@ -227,7 +227,6 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	trainerNr, err := lobby.addTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
 		r.Header.Get(tokens.AuthTokenHeaderName), conn, commsManager)
-
 	if err != nil {
 		handleJoinConnError(err, conn)
 		return
@@ -252,7 +251,8 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		emitTradeFinish()
 		ongoingTrades.Delete(lobby.wsLobby.Id)
 	} else {
-		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
+		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken,
+			*lobby.wsLobby.StartTrackInfo)
 		if err != nil {
 			utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
 			return
@@ -424,8 +424,7 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 	return nil
 }
 
-func postNotification(sender, receiver, lobbyId string, authToken string) error {
-
+func postNotification(sender, receiver, lobbyId, authToken string, info ws.TrackedInfo) error {
 	toMarshal := notifications.WantsToTradeContent{
 		Username:       sender,
 		LobbyId:        lobbyId,
@@ -446,6 +445,7 @@ func postNotification(sender, receiver, lobbyId string, authToken string) error 
 
 	notificationMsg := notificationMessages.NotificationMessage{
 		Notification: notification,
+		Info:         info,
 	}
 
 	err = notificationsClient.AddNotification(&notificationMsg, authToken)
