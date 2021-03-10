@@ -14,6 +14,7 @@ import (
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/trades"
 	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
 )
 
 type tradeLobby struct {
@@ -153,6 +154,7 @@ func (lobby *tradeLobby) handleMessage(wsMsg *ws.WebsocketMsg, status *trades.Tr
 	trainerNum int) *ws.WebsocketMsg {
 	content := wsMsg.Content
 	msgData := wsMsg.Content.Data
+
 	switch wsMsg.Content.AppMsgType {
 	case trades.Trade:
 		tradeMsg := &trades.TradeMessage{}
@@ -161,7 +163,14 @@ func (lobby *tradeLobby) handleMessage(wsMsg *ws.WebsocketMsg, status *trades.Tr
 		}
 		return lobby.handleTradeMessage(content.RequestTrack, tradeMsg, status, trainerNum)
 	case trades.Accept:
-		return lobby.handleAcceptMessage(content.RequestTrack, status, trainerNum)
+		log.Infof("ACCEPT %s emitted at %d, received at %d", content.RequestTrack.Id,
+			content.RequestTrack.TimeReceived, ws.MakeTimestamp())
+
+		result := lobby.handleAcceptMessage(content.RequestTrack, status, trainerNum)
+
+		log.Infof("ACCEPT %s finished handling at %d", content.RequestTrack.Id, ws.MakeTimestamp())
+
+		return result
 	default:
 		return ws.ErrorMessage{
 			Info:  fmt.Sprintf("invalid msg type %s", content.AppMsgType),
