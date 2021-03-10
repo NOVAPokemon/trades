@@ -129,6 +129,8 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	lobbyId := primitive.NewObjectID()
 
+	log.Infof("creating lobby %s (%d)", lobbyId, ws.MakeTimestamp())
+
 	lobby := tradeLobby{
 		expected:       [2]string{authClaims.Username, request.Username},
 		wsLobby:        ws.NewLobby(lobbyId.Hex(), 2, &trackedInfo),
@@ -156,18 +158,31 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	}
 
 	waitingTrades.Store(lobbyId.Hex(), &lobby)
-	log.Info("created lobby ", lobbyId)
+	log.Infof("created lobby %s (%d)", lobbyId, ws.MakeTimestamp())
 
 	go cleanLobby(trackedInfo, &lobby)
 }
 
 func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	lobbyIdHex, ok := vars[api.TradeIdVar]
+	if !ok {
+		log.Error("no trade id")
+		return
+	}
+
+	lobbyLog := log.WithField("LOBBY", lobbyIdHex)
+
+	lobbyLog.Infof("got join lobby request at %d", ws.MakeTimestamp())
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		err = ws.WrapUpgradeConnectionError(err)
 		handleJoinConnError(err, conn)
 		return
 	}
+
+	lobbyLog.Infof("upgraded to ws at %d", ws.MakeTimestamp())
 
 	claims, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
@@ -176,8 +191,7 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vars := mux.Vars(r)
-	lobbyIdHex, ok := vars[api.TradeIdVar]
+	lobbyIdHex, ok = vars[api.TradeIdVar]
 	if !ok {
 		handleJoinConnError(errorNoTradeId, conn)
 		return
@@ -210,6 +224,8 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	lobbyLog.Infof("verified all tokens at %d", ws.MakeTimestamp())
+
 	authToken := r.Header.Get(tokens.AuthTokenHeaderName)
 
 	trainersClient := clients.NewTrainersClient(httpClient, commsManager)
@@ -218,6 +234,8 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		handleJoinConnError(err, conn)
 		return
 	}
+
+	lobbyLog.Infof("verified items at %d", ws.MakeTimestamp())
 
 	if !*valid {
 		err = tokens.ErrorInvalidItemsToken
@@ -231,6 +249,8 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		handleJoinConnError(err, conn)
 		return
 	}
+
+	lobbyLog.Infof("added trainer to lobby at %d", ws.MakeTimestamp())
 
 	if trainerNr == 2 {
 		waitingTrades.Delete(lobbyId.Hex())
@@ -251,6 +271,8 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		emitTradeFinish()
 		ongoingTrades.Delete(lobby.wsLobby.Id)
 	} else {
+		trackedInfo := ws.GetTrackInfoFromHeader(&r.Header)
+		lobby.wsLobby.StartTrackInfo = &trackedInfo
 		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken,
 			*lobby.wsLobby.StartTrackInfo)
 		if err != nil {
@@ -438,6 +460,7 @@ func postNotification(sender, receiver, lobbyId, authToken string, info ws.Track
 	}
 
 	notification := utils.Notification{
+		Id:       primitive.NewObjectID().Hex(),
 		Username: receiver,
 		Type:     notifications.WantsToTrade,
 		Content:  string(contentBytes),
@@ -448,8 +471,9 @@ func postNotification(sender, receiver, lobbyId, authToken string, info ws.Track
 		Info:         info,
 	}
 
-	err = notificationsClient.AddNotification(&notificationMsg, authToken)
+	log.Infof("posting notification %s (%d)", notification.Id, ws.MakeTimestamp())
 
+	err = notificationsClient.AddNotification(&notificationMsg, authToken)
 	if err != nil {
 		log.Error(err)
 		return err
