@@ -113,12 +113,12 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 	lobbyId := primitive.NewObjectID()
 
 	lobby := tradeLobby{
-		expected:         [2]string{authClaims.Username, request.Username},
-		wsLobby:          ws.NewLobby(lobbyId.Hex(), 2, &trackedInfo),
-		availableItems:   [2]trades.ItemsMap{},
-		initialHashes:    [2]string{},
-		rejected:         make(chan struct{}),
-		itemsLock:        sync.Mutex{},
+		expected:       [2]string{authClaims.Username, request.Username},
+		wsLobby:        ws.NewLobby(lobbyId.Hex(), 2, &trackedInfo),
+		availableItems: [2]trades.ItemsMap{},
+		initialHashes:  [2]string{},
+		rejected:       make(chan struct{}),
+		itemsLock:      sync.Mutex{},
 	}
 
 	resp := api.CreateLobbyResponse{
@@ -210,7 +210,6 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	trainerNr, err := lobby.addTrainer(claims.Username, itemsClaims.Items, itemsClaims.ItemsHash,
 		r.Header.Get(tokens.AuthTokenHeaderName), conn, commsManager)
-
 	if err != nil {
 		handleJoinConnError(err, conn)
 		return
@@ -235,6 +234,8 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 		emitTradeFinish()
 		ongoingTrades.Delete(lobby.wsLobby.Id)
 	} else {
+		trackedInfo := ws.GetTrackInfoFromHeader(&r.Header)
+		lobby.wsLobby.StartTrackInfo = &trackedInfo
 		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
 		if err != nil {
 			utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
@@ -407,8 +408,9 @@ func tradeItems(trainersClient *clients.TrainersClient, username, authToken stri
 	return nil
 }
 
-func postNotification(sender, receiver, lobbyId string, authToken string) error {
-	toMarshal := notifications.WantsToTradeContent{Username: sender,
+func postNotification(sender, receiver, lobbyId, authToken string, info ws.TrackedInfo) error {
+	toMarshal := notifications.WantsToTradeContent{
+		Username:       sender,
 		LobbyId:        lobbyId,
 		ServerHostname: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
 	}
@@ -420,6 +422,7 @@ func postNotification(sender, receiver, lobbyId string, authToken string) error 
 	}
 
 	notification := utils.Notification{
+		Id:       primitive.NewObjectID().Hex(),
 		Username: receiver,
 		Type:     notifications.WantsToTrade,
 		Content:  string(contentBytes),
@@ -427,6 +430,7 @@ func postNotification(sender, receiver, lobbyId string, authToken string) error 
 
 	notificationMsg := notificationMessages.NotificationMessage{
 		Notification: notification,
+		Info:         info,
 	}
 
 	err = notificationsClient.AddNotification(&notificationMsg, authToken)

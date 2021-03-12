@@ -31,7 +31,7 @@ func main() {
 		commsManager = utils.CreateDefaultDelayedManager(locationTag, false)
 	}
 
-	notificationsClient = clients.NewNotificationClient(nil, commsManager)
+	notificationsClient = clients.NewNotificationClient(nil, commsManager, httpClient)
 
 	utils.StartServer(serviceName, host, port, routes, commsManager)
 }
