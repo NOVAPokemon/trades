@@ -36,6 +36,7 @@ var (
 	waitingTrades = sync.Map{}
 	ongoingTrades = sync.Map{}
 	httpClient    = &http.Client{}
+	basicClient   = clients.NewBasicClient(false, "")
 
 	serverName          string
 	serviceNameHeadless string
@@ -195,7 +196,7 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	authToken := r.Header.Get(tokens.AuthTokenHeaderName)
 
-	trainersClient := clients.NewTrainersClient(httpClient, commsManager)
+	trainersClient := clients.NewTrainersClient(httpClient, commsManager, basicClient)
 	valid, err := trainersClient.VerifyItems(username, itemsClaims.ItemsHash, authToken)
 	if err != nil {
 		handleJoinConnError(err, conn)
@@ -236,7 +237,7 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	} else {
 		trackedInfo := ws.GetTrackInfoFromHeader(&r.Header)
 		lobby.wsLobby.StartTrackInfo = &trackedInfo
-		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken)
+		err = postNotification(lobby.expected[0], lobby.expected[1], lobbyId.Hex(), authToken, trackedInfo)
 		if err != nil {
 			utils.LogAndSendHTTPError(&w, wrapCreateTradeError(err), http.StatusInternalServerError)
 			return
