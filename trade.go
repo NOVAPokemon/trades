@@ -3,9 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"sync"
 	"time"
+
+	"github.com/mitchellh/mapstructure"
 
 	"github.com/NOVAPokemon/utils/clients"
 	errors2 "github.com/NOVAPokemon/utils/clients/errors"
@@ -16,9 +17,9 @@ import (
 )
 
 type tradeLobby struct {
-	expected         [2]string
-	wsLobby          *ws.Lobby
-	status           *trades.TradeStatus
+	expected [2]string
+	wsLobby  *ws.Lobby
+	status   *trades.TradeStatus
 
 	availableItems [2]trades.ItemsMap
 	itemsLock      sync.Mutex
@@ -27,6 +28,8 @@ type tradeLobby struct {
 
 	authTokens [2]string
 	tokensLock sync.Mutex
+
+	initialized int32
 
 	rejected chan struct{}
 }
@@ -65,7 +68,7 @@ func (lobby *tradeLobby) startTrade() error {
 func (lobby *tradeLobby) tradeMainLoop() error {
 	wsLobby := lobby.wsLobby
 	updateClients(trades.StartTradeMessage{}.ConvertToWSMessage(*lobby.wsLobby.StartTrackInfo),
-	wsLobby.TrainerOutChannels[0],
+		wsLobby.TrainerOutChannels[0],
 		wsLobby.TrainerOutChannels[1])
 	ws.StartLobby(wsLobby)
 	emitTradeStart()
