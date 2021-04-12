@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/NOVAPokemon/utils"
@@ -217,6 +217,10 @@ func handleJoinTradeLobby(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if trainerNr == 2 {
+		if !atomic.CompareAndSwapInt32(&lobby.initialized, 0, 1) {
+			return
+		}
+
 		waitingTrades.Delete(lobbyId.Hex())
 		ongoingTrades.Store(lobbyId.Hex(), lobby)
 
@@ -318,6 +322,10 @@ func cleanLobby(createdTrackInfo ws.TrackedInfo, lobby *tradeLobby) {
 	defer timer.Stop()
 	select {
 	case <-timer.C:
+		if !atomic.CompareAndSwapInt32(&lobby.initialized, 0, 1) {
+			return
+		}
+
 		if ws.GetTrainersJoined(lobby.wsLobby) > 0 {
 			log.Warnf("closing lobby %s since time expired", lobby.wsLobby.Id)
 			select {
