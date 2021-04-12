@@ -124,7 +124,7 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 
 	resp := api.CreateLobbyResponse{
 		LobbyId:    lobbyId.Hex(),
-		ServerName: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
+		ServerName: serverName,
 	}
 	respBytes, err := json.Marshal(resp)
 	if err != nil {
