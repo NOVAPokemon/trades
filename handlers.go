@@ -413,7 +413,7 @@ func postNotification(sender, receiver, lobbyId, authToken string, info ws.Track
 	toMarshal := notifications.WantsToTradeContent{
 		Username:       sender,
 		LobbyId:        lobbyId,
-		ServerHostname: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless),
+		ServerHostname: serverName,
 	}
 
 	contentBytes, err := json.Marshal(toMarshal)
