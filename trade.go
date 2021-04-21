@@ -32,6 +32,7 @@ type tradeLobby struct {
 	initialized int32
 
 	rejected chan struct{}
+	reject   sync.Once
 }
 
 func (lobby *tradeLobby) addTrainer(username string, items map[string]items.Item, itemsHash string,
