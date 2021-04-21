@@ -31,6 +31,7 @@ type tradeLobby struct {
 	tokensLock sync.Mutex
 
 	rejected chan struct{}
+	reject   sync.Once
 }
 
 func (lobby *tradeLobby) addTrainer(username string, items map[string]items.Item, itemsHash string,

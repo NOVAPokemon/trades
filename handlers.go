@@ -11,6 +11,8 @@ import (
 	http "github.com/bruno-anjos/archimedesHTTPClient"
 	cedUtils "github.com/bruno-anjos/cloud-edge-deployment/pkg/utils"
 
+	originalHTTP "net/http"
+
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -26,7 +28,6 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	originalHTTP "net/http"
 )
 
 type (
@@ -137,6 +138,7 @@ func handleCreateTradeLobby(w http.ResponseWriter, r *http.Request) {
 		availableItems: [2]trades.ItemsMap{},
 		initialHashes:  [2]string{},
 		rejected:       make(chan struct{}),
+		reject:         sync.Once{},
 		itemsLock:      sync.Mutex{},
 	}
 
@@ -311,7 +313,9 @@ func handleRejectTradeLobby(w http.ResponseWriter, r *http.Request) {
 	for _, trainer := range lobby.expected {
 		if trainer == authClaims.Username {
 			log.Infof("%s rejected invite for lobby %s", trainer, lobbyIdHex)
-			close(lobby.rejected)
+			lobby.reject.Do(func() {
+				close(lobby.rejected)
+			})
 			return
 		}
 	}
