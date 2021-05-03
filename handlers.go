@@ -41,7 +41,12 @@ const (
 var (
 	waitingTrades = sync.Map{}
 	ongoingTrades = sync.Map{}
-	httpClient    = &http.Client{Client: originalHTTP.Client{Timeout: clients.RequestTimeout}}
+	httpClient    = &http.Client{
+		Client: originalHTTP.Client{
+			Timeout:   clients.RequestTimeout,
+			Transport: clients.NewTransport(),
+		},
+	}
 
 	serverName   string
 	externalAddr string
