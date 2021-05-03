@@ -35,7 +35,12 @@ const (
 var (
 	waitingTrades = sync.Map{}
 	ongoingTrades = sync.Map{}
-	httpClient    = &http.Client{}
+	httpClient    = &http.Client{
+		Client: originalHTTP.Client{
+			Timeout:   clients.RequestTimeout,
+			Transport: clients.NewTransport(),
+		},
+	}
 	basicClient   = clients.NewBasicClient(false, "")
 
 	serverName          string
