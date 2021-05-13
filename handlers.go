@@ -36,7 +36,7 @@ var (
 	waitingTrades = sync.Map{}
 	ongoingTrades = sync.Map{}
 	httpClient    = &http.Client{
-		Timeout:   utils.Timeout,
+		Timeout:   ws.Timeout,
 		Transport: clients.NewTransport(),
 	}
 	basicClient = clients.NewBasicClient(false, "")
