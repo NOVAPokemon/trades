@@ -43,7 +43,7 @@ var (
 	ongoingTrades = sync.Map{}
 	httpClient    = &http.Client{
 		Client: originalHTTP.Client{
-			Timeout:   clients.RequestTimeout,
+			Timeout:   ws.Timeout,
 			Transport: clients.NewTransport(),
 		},
 	}
